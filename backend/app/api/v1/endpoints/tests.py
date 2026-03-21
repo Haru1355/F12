@@ -1,9 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Optional
 
 from app.core.database import get_session
-from app.core.dependencies import get_current_user, get_current_psychologist, get_current_admin
+from app.core.dependencies import get_current_user, get_current_psychologist
 from app.services.test_service import (
     create_test,
     get_test_by_id,
@@ -27,7 +26,6 @@ async def create_test_endpoint(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_psychologist),
 ):
-    """Создать новый тест."""
     test = await create_test(session, data, current_user.id)
     return _test_to_response(test)
 
@@ -39,14 +37,10 @@ async def list_tests_endpoint(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Список тестов текущего пользователя (или все — для админа)."""
     if current_user.role == "admin":
         tests, total = await list_all_tests(session, skip=skip, limit=limit)
     else:
-        tests, total = await list_tests_by_owner(
-            session, current_user.id, skip=skip, limit=limit
-        )
-
+        tests, total = await list_tests_by_owner(session, current_user.id, skip=skip, limit=limit)
     return TestListResponse(
         tests=[_test_to_response(t) for t in tests],
         total=total,
@@ -58,7 +52,6 @@ async def get_test_by_link_endpoint(
     unique_link: str,
     session: AsyncSession = Depends(get_session),
 ):
-    """Получить тест по уникальной ссылке (публичный, для клиента)."""
     test = await get_test_by_link(session, unique_link)
     if not test:
         raise HTTPException(status_code=404, detail="Тест не найден или не опубликован")
@@ -71,22 +64,12 @@ async def get_test_by_link_endpoint(
         ]
         questions.append(
             QuestionPublicResponse(
-                id=q.id,
-                text=q.text,
-                question_type=q.question_type,
-                order=q.order,
-                is_required=q.is_required,
-                scale_config=q.scale_config,
-                options=options,
+                id=q.id, text=q.text, question_type=q.question_type,
+                order=q.order, is_required=q.is_required,
+                scale_config=q.scale_config, options=options,
             )
         )
-
-    return TestPublicResponse(
-        id=test.id,
-        title=test.title,
-        description=test.description,
-        questions=questions,
-    )
+    return TestPublicResponse(id=test.id, title=test.title, description=test.description, questions=questions)
 
 
 @router.get("/{test_id}", response_model=TestResponse)
@@ -95,15 +78,11 @@ async def get_test_endpoint(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Получить тест по ID."""
     test = await get_test_by_id(session, test_id, with_relations=True)
     if not test:
         raise HTTPException(status_code=404, detail="Тест не найден")
-
-    # Проверяем доступ
     if current_user.role != "admin" and test.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Нет доступа к этому тесту")
-
     return _test_to_response(test)
 
 
@@ -114,13 +93,11 @@ async def update_test_endpoint(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_psychologist),
 ):
-    """Обновить тест."""
     test = await get_test_by_id(session, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Тест не найден")
     if current_user.role != "admin" and test.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Нет доступа")
-
     updated = await update_test(session, test, data)
     return _test_to_response(updated)
 
@@ -131,13 +108,11 @@ async def delete_test_endpoint(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_psychologist),
 ):
-    """Удалить тест."""
     test = await get_test_by_id(session, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Тест не найден")
     if current_user.role != "admin" and test.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Нет доступа")
-
     await delete_test(session, test)
 
 
@@ -147,30 +122,21 @@ async def regenerate_link_endpoint(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_psychologist),
 ):
-    """Сгенерировать новую уникальную ссылку для теста."""
     test = await get_test_by_id(session, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Тест не найден")
     if current_user.role != "admin" and test.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Нет доступа")
-
     updated = await regenerate_link(session, test)
     return _test_to_response(updated)
 
 
 def _test_to_response(test) -> TestResponse:
-    """Преобразование ORM-объекта Test в Pydantic-ответ."""
     return TestResponse(
-        id=test.id,
-        title=test.title,
-        description=test.description,
-        owner_id=test.owner_id,
-        is_published=test.is_published,
-        unique_link=test.unique_link,
-        show_result_to_client=test.show_result_to_client,
-        scoring_config=test.scoring_config,
-        created_at=test.created_at,
-        updated_at=test.updated_at,
+        id=test.id, title=test.title, description=test.description,
+        owner_id=test.owner_id, is_published=test.is_published,
+        unique_link=test.unique_link, show_result_to_client=test.show_result_to_client,
+        scoring_config=test.scoring_config, created_at=test.created_at, updated_at=test.updated_at,
         questions_count=len(test.questions) if hasattr(test, 'questions') and test.questions else 0,
         sessions_count=len(test.sessions) if hasattr(test, 'sessions') and test.sessions else 0,
     )

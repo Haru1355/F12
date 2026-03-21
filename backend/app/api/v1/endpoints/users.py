@@ -18,13 +18,12 @@ router = APIRouter()
 
 @router.get("/", response_model=UserListResponse)
 async def get_users(
-    role: Optional[str] = Query(None, description="Фильтр по роли (admin, psychologist)"),
+    role: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     session: AsyncSession = Depends(get_session),
     current_admin: User = Depends(get_current_admin),
 ):
-    """Список пользователей (только для админа)."""
     users, total = await list_users(session, role=role, skip=skip, limit=limit)
     return UserListResponse(
         users=[UserResponse.model_validate(u) for u in users],
@@ -38,7 +37,6 @@ async def get_user(
     session: AsyncSession = Depends(get_session),
     current_admin: User = Depends(get_current_admin),
 ):
-    """Получить пользователя по ID (только для админа)."""
     user = await get_user_by_id(session, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
@@ -52,11 +50,9 @@ async def update_user_endpoint(
     session: AsyncSession = Depends(get_session),
     current_admin: User = Depends(get_current_admin),
 ):
-    """Обновить пользователя (только для админа)."""
     user = await get_user_by_id(session, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
-
     updated = await update_user(session, user, data)
     return UserResponse.model_validate(updated)
 
@@ -67,12 +63,9 @@ async def delete_user_endpoint(
     session: AsyncSession = Depends(get_session),
     current_admin: User = Depends(get_current_admin),
 ):
-    """Удалить пользователя (только для админа)."""
     user = await get_user_by_id(session, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
-
     if user.id == current_admin.id:
         raise HTTPException(status_code=400, detail="Нельзя удалить самого себя")
-
     await delete_user(session, user)
