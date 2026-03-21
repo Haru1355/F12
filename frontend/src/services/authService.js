@@ -19,13 +19,15 @@ export const authService = {
     }
   },
 
-  register: async (email, password, role, name) => {
+  register: async (email, password, full_name, role = 'psychologist') => {
     try {
-      const response = await api.post('/auth/register', { email, password, role, name });
-      const { access_token, user } = response.data;
-      localStorage.setItem('access_token', access_token);
-      localStorage.setItem('user', JSON.stringify(user));
-      return user;
+      const response = await api.post('/auth/register', {
+        email,
+        password,
+        full_name,
+        role,
+      });
+      return response.data;
     } catch (error) {
       const message = error.response?.data?.detail || 'Ошибка регистрации';
       throw new Error(message);
@@ -44,23 +46,43 @@ export const authService = {
     return updatedUser;
   },
 
-  // Админские методы для управления психологами
+  // Админские методы
   getAllPsychologists: async () => {
-    const response = await api.get('/admin/psychologists');
+    const response = await api.get('/users/?role=psychologist');
     return response.data;
   },
 
-  createPsychologist: async (email, password, name) => {
-    const response = await api.post('/admin/psychologists', { email, password, name });
+  createPsychologist: async (email, password, full_name) => {
+    const response = await api.post('/auth/register', {
+      email,
+      password,
+      full_name,
+      role: 'psychologist',
+    });
     return response.data;
   },
 
   updatePsychologist: async (id, updates) => {
-    const response = await api.patch(`/admin/psychologists/${id}`, updates);
+    const response = await api.patch(`/users/${id}`, updates);
     return response.data;
   },
 
   deletePsychologist: async (id) => {
-    await api.delete(`/admin/psychologists/${id}`);
+    await api.delete(`/users/${id}`);
+  },
+
+  extendAccess: async (id, days = 30) => {
+    const response = await api.patch(`/users/${id}/extend-access?days=${days}`);
+    return response.data;
+  },
+
+  blockPsychologist: async (id) => {
+    const response = await api.patch(`/users/${id}/block`);
+    return response.data;
+  },
+
+  unblockPsychologist: async (id) => {
+    const response = await api.patch(`/users/${id}/unblock`);
+    return response.data;
   },
 };

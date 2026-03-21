@@ -1,27 +1,22 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000/docs'; 
-
 const api = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: 'http://localhost:8000/api/v1',
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Интерцептор для добавления токена авторизации
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem('access_token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+// Автоматически добавляем токен к каждому запросу
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('access_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
-// Интерцептор для обработки ошибок авторизации
+// Если токен истёк — разлогиниваем
 api.interceptors.response.use(
   (response) => response,
   (error) => {
