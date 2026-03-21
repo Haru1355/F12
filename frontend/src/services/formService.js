@@ -1,27 +1,47 @@
-const FORMS_KEY = 'psych_forms';
+import api from './api';
 
 export const formService = {
-  getFormsByPsychologist: (psychologistId) => {
-    const forms = JSON.parse(localStorage.getItem(FORMS_KEY) || '[]');
-    return forms.filter(f => f.psychologistId === psychologistId);
+  getAllForms: async () => {
+    const response = await api.get('/forms');
+    return response.data;
   },
 
-  createForm: (psychologistId, title, questions) => {
-    const forms = JSON.parse(localStorage.getItem(FORMS_KEY) || '[]');
-    const newForm = {
-      id: Date.now().toString(),
-      psychologistId,
-      title,
-      questions, // массив объектов { questionText, type: 'text'|'radio'... }
-      createdAt: new Date().toISOString()
-    };
-    forms.push(newForm);
-    localStorage.setItem(FORMS_KEY, JSON.stringify(forms));
-    return newForm;
+  getFormsByPsychologist: async (psychologistId) => {
+    const response = await api.get(`/psychologists/${psychologistId}/forms`);
+    return response.data;
   },
 
-  getForm: (formId) => {
-    const forms = JSON.parse(localStorage.getItem(FORMS_KEY) || '[]');
-    return forms.find(f => f.id === formId);
-  }
+  createForm: async (psychologistId, title, questions) => {
+    const response = await api.post('/forms', { psychologistId, title, questions });
+    return response.data;
+  },
+
+  getForm: async (formId) => {
+    const response = await api.get(`/forms/${formId}`);
+    return response.data;
+  },
+
+  updateForm: async (formId, updates) => {
+    const response = await api.patch(`/forms/${formId}`, updates);
+    return response.data;
+  },
+
+  deleteForm: async (formId) => {
+    await api.delete(`/forms/${formId}`);
+  },
+
+  saveResponse: async (formId, clientName, answers) => {
+    const response = await api.post(`/forms/${formId}/responses`, { clientName, answers });
+    return response.data;
+  },
+
+  getAllResponses: async () => {
+    const response = await api.get('/responses');
+    return response.data;
+  },
+
+  getResponseById: async (responseId) => {
+    const response = await api.get(`/responses/${responseId}`);
+    return response.data;
+  },
 };

@@ -1,59 +1,66 @@
-const USERS_KEY = 'psych_users';
-const CURRENT_USER_KEY = 'psych_current_user';
-
-// Начальные данные: создаём администратора по умолчанию
-const initUsers = () => {
-  const users = localStorage.getItem(USERS_KEY);
-  if (!users) {
-    const defaultAdmin = {
-      id: '1',
-      email: 'admin@example.com',
-      password: 'admin123', // в реальности хэшируем
-      role: 'admin',
-      name: 'Администратор'
-    };
-    localStorage.setItem(USERS_KEY, JSON.stringify([defaultAdmin]));
-  }
-};
+import api from './api';
 
 export const authService = {
   getCurrentUser: () => {
-    const userJson = localStorage.getItem(CURRENT_USER_KEY);
-    return userJson ? JSON.parse(userJson) : null;
+    const user = localStorage.getItem('user');
+    return user ? JSON.parse(user) : null;
   },
 
   login: async (email, password) => {
-    initUsers();
-    const users = JSON.parse(localStorage.getItem(USERS_KEY));
-    const user = users.find(u => u.email === email && u.password === password);
-    if (user) {
-      // Не сохраняем пароль в сессии
-      const {  ...safeUser } = user;
-      localStorage.setItem(CURRENT_USER_KEY, JSON.stringify(safeUser));
-      return safeUser;
+    try {
+      const response = await api.post('/auth/login', { email, password });
+      const { access_token, user } = response.data;
+      localStorage.setItem('access_token', access_token);
+      localStorage.setItem('user', JSON.stringify(user));
+      return user;
+    } catch (error) {
+      const message = error.response?.data?.detail || 'Ошибка входа';
+      throw new Error(message);
     }
-    return null;
   },
 
   register: async (email, password, role, name) => {
-    initUsers();
-    const users = JSON.parse(localStorage.getItem(USERS_KEY));
-    if (users.find(u => u.email === email)) {
-      return { success: false, error: 'Email уже используется' };
+    try {
+      const response = await api.post('/auth/register', { email, password, role, name });
+      const { access_token, user } = response.data;
+      localStorage.setItem('access_token', access_token);
+      localStorage.setItem('user', JSON.stringify(user));
+      return user;
+    } catch (error) {
+      const message = error.response?.data?.detail || 'Ошибка регистрации';
+      throw new Error(message);
     }
-    const newUser = {
-      id: Date.now().toString(),
-      email,
-      password,
-      role,
-      name
-    };
-    users.push(newUser);
-    localStorage.setItem(USERS_KEY, JSON.stringify(users));
-    return { success: true };
   },
 
   logout: () => {
-    localStorage.removeItem(CURRENT_USER_KEY);
-  }
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('user');
+  },
+
+  updateProfile: async (userId, updates) => {
+    const response = await api.patch(`/users/${userId}`, updates);
+    const updatedUser = response.data;
+    localStorage.setItem('user', JSON.stringify(updatedUser));
+    return updatedUser;
+  },
+
+  // Админские методы для управления психологами
+  getAllPsychologists: async () => {
+    const response = await api.get('/admin/psychologists');
+    return response.data;
+  },
+
+  createPsychologist: async (email, password, name) => {
+    const response = await api.post('/admin/psychologists', { email, password, name });
+    return response.data;
+  },
+
+  updatePsychologist: async (id, updates) => {
+    const response = await api.patch(`/admin/psychologists/${id}`, updates);
+    return response.data;
+  },
+
+  deletePsychologist: async (id) => {
+    await api.delete(`/admin/psychologists/${id}`);
+  },
 };

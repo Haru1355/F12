@@ -13,7 +13,7 @@ export const Navbar = () => {
   return (
     <nav className="navbar">
       <div className="container">
-        <Link to="/" className="navbar-brand">ПрофДНК</Link>
+        <Link to="/" className="navbar-brand">ПсихоПлатформа</Link>
         <div className="navbar-nav">
           {!user ? (
             <>
@@ -23,10 +23,18 @@ export const Navbar = () => {
           ) : (
             <>
               {user.role === 'admin' && (
-                <Link to="/admin" className="nav-link">Админ панель</Link>
+                <>
+                  <Link to="/admin/profile" className="nav-link">Мой профиль</Link>
+                  <Link to="/admin" className="nav-link">Психологи</Link>
+                  <Link to="/admin/tests" className="nav-link">Все тесты</Link>
+                  <Link to="/admin/sessions" className="nav-link">Сессии</Link>
+                </>
               )}
               {user.role === 'psychologist' && (
-                <Link to="/psychologist" className="nav-link">Мой кабинет</Link>
+                <>
+                  <Link to="/psychologist/profile" className="nav-link">Мой профиль</Link>
+                  <Link to="/psychologist" className="nav-link">Опросы</Link>
+                </>
               )}
               <button onClick={handleLogout} className="btn btn-outline">Выйти</button>
             </>

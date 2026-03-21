@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { psychologistService } from '../services/psychologistService';
+import { authService } from '../services/authService';
 import { formService } from '../services/formService';
 
 export const PsychologistDashboard = () => {
@@ -11,19 +11,26 @@ export const PsychologistDashboard = () => {
   const [newFormTitle, setNewFormTitle] = useState('');
   const [questions, setQuestions] = useState([{ questionText: '', type: 'text' }]);
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(true);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps, no-undef
-  const loadData = useCallback(() => {
-    const psychologists = psychologistService.getAll();
-    const currentPsych = psychologists.find(p => p.email === user.email);
-    setPsychologistData(currentPsych);
-    const myForms = formService.getFormsByPsychologist(currentPsych.id);
-    setForms(myForms);
+  const loadData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const psychs = await authService.getAllPsychologists(); // или можно запросить /users/me, но пока так
+      const currentPsych = psychs.find(p => p.email === user.email);
+      setPsychologistData(currentPsych);
+      const myForms = await formService.getFormsByPsychologist(currentPsych.id);
+      setForms(myForms);
+    } catch (err) {
+      setMessage(err.message);
+    } finally {
+      setLoading(false);
+    }
   });
 
   useEffect(() => {
-     
-    loadData();
+    if (user) loadData();
   }, [loadData, user]);
 
   const handleAddQuestion = () => {
@@ -36,23 +43,29 @@ export const PsychologistDashboard = () => {
     setQuestions(updated);
   };
 
-  const handleCreateForm = (e) => {
+  const handleCreateForm = async (e) => {
     e.preventDefault();
     if (!newFormTitle) return;
-    formService.createForm(psychologistData.id, newFormTitle, questions);
-    setNewFormTitle('');
-    setQuestions([{ questionText: '', type: 'text' }]);
-    setShowFormCreator(false);
-    loadData();
-    setMessage('Опрос создан!');
-    setTimeout(() => setMessage(''), 3000);
+    try {
+      await formService.createForm(psychologistData.id, newFormTitle, questions);
+      setNewFormTitle('');
+      setQuestions([{ questionText: '', type: 'text' }]);
+      setShowFormCreator(false);
+      await loadData();
+      setMessage('Опрос создан!');
+      setTimeout(() => setMessage(''), 3000);
+    // eslint-disable-next-line no-unused-vars
+    } catch (err) {
+      setMessage('Ошибка создания опроса');
+    }
   };
 
   const getFormLink = (formId) => {
     return `${window.location.origin}/form/${formId}`;
   };
 
-  if (!psychologistData) return <div className="container">Загрузка...</div>;
+  if (loading) return <div className="container">Загрузка...</div>;
+  if (!psychologistData) return <div className="container">Психолог не найден</div>;
 
   const subscriptionExpiry = psychologistData.subscriptionExpiry ? new Date(psychologistData.subscriptionExpiry) : null;
   const isActive = subscriptionExpiry ? subscriptionExpiry > new Date() : false;
