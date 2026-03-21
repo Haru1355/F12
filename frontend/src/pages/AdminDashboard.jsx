@@ -2,16 +2,17 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
 import { formService } from '../services/formService';
+import { psychologistService } from '../services/psychologistService';
 
 export const AdminDashboard = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
   const [psychologists, setPsychologists] = useState([]);
-  const [forms, setForms] = useState([]);
-  const [responses, setResponses] = useState([]);
+  const [tests, setTests] = useState([]);
+  const [sessions, setSessions] = useState([]);
   const [editingPsych, setEditingPsych] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newPsych, setNewPsych] = useState({ email: '', password: '', name: '' });
+  const [newPsych, setNewPsych] = useState({ email: '', password: '', full_name: '' });
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -19,14 +20,14 @@ export const AdminDashboard = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [psychs, allForms, allResponses] = await Promise.all([
+      const [psychs, allTests, allSessions] = await Promise.all([
         authService.getAllPsychologists(),
         formService.getAllForms(),
         formService.getAllResponses(),
       ]);
       setPsychologists(psychs);
-      setForms(allForms);
-      setResponses(allResponses);
+      setTests(allTests);
+      setSessions(allSessions);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -38,61 +39,95 @@ export const AdminDashboard = () => {
     loadData();
   }, []);
 
+  const showMessage = (msg) => {
+    setMessage(msg);
+    setTimeout(() => setMessage(''), 3000);
+  };
+
   const handleCreatePsychologist = async (e) => {
     e.preventDefault();
     try {
-      await authService.createPsychologist(newPsych.email, newPsych.password, newPsych.name);
-      setMessage('Психолог создан');
-      setTimeout(() => setMessage(''), 3000);
-      setNewPsych({ email: '', password: '', name: '' });
+      await authService.createPsychologist(newPsych.email, newPsych.password, newPsych.full_name);
+      showMessage('Психолог создан');
+      setNewPsych({ email: '', password: '', full_name: '' });
       setShowCreateForm(false);
       await loadData();
     } catch (err) {
-      setMessage(err.message);
+      showMessage(err.message);
     }
   };
 
   const handleUpdatePsychologist = async (id, updates) => {
     try {
       await authService.updatePsychologist(id, updates);
-      setMessage('Данные обновлены');
-      setTimeout(() => setMessage(''), 3000);
+      showMessage('Данные обновлены');
       setEditingPsych(null);
       await loadData();
-    // eslint-disable-next-line no-unused-vars
-    } catch (err) {
-      setMessage('Ошибка обновления');
+    } catch {
+      showMessage('Ошибка обновления');
     }
   };
 
   const handleDeletePsychologist = async (id) => {
-    if (window.confirm('Удалить психолога? Это удалит все его опросы и ответы.')) {
+    if (window.confirm('Удалить психолога? Это удалит все его тесты и данные.')) {
       try {
         await authService.deletePsychologist(id);
+        showMessage('Психолог удалён');
         await loadData();
-        setMessage('Психолог удалён');
-        setTimeout(() => setMessage(''), 3000);
-      // eslint-disable-next-line no-unused-vars
-      } catch (err) {
-        setMessage('Ошибка удаления');
+      } catch {
+        showMessage('Ошибка удаления');
       }
     }
   };
 
-  const getPsychologistName = (id) => {
-    const psych = psychologists.find(p => p.id === id);
-    return psych ? psych.name : 'Неизвестно';
+  const handleBlockPsychologist = async (id, isActive) => {
+    try {
+      if (isActive) {
+        await authService.blockPsychologist(id);
+        showMessage('Психолог заблокирован');
+      } else {
+        await authService.unblockPsychologist(id);
+        showMessage('Психолог разблокирован');
+      }
+      await loadData();
+    } catch {
+      showMessage('Ошибка');
+    }
   };
 
-  const getFormLink = (formId) => {
-    return `${window.location.origin}/form/${formId}`;
+  const handleExtendAccess = async (id) => {
+    const days = prompt('На сколько дней продлить доступ?', '30');
+    if (days) {
+      try {
+        await authService.extendAccess(id, parseInt(days));
+        showMessage(`Доступ продлён на ${days} дней`);
+        await loadData();
+      } catch {
+        showMessage('Ошибка продления');
+      }
+    }
   };
 
-  const handleReport = (responseId) => {
-    // Можно открыть модальное окно с ответами или перейти на страницу отчёта
-    const response = responses.find(r => r.id === responseId);
-    const form = forms.find(f => f.id === response?.formId);
-    alert(`Отчёт по сессии\nКлиент: ${response.clientName}\nТест: ${form?.title}\nОтветы: ${JSON.stringify(response.answers, null, 2)}`);
+  const handleReport = async (sessionId) => {
+    try {
+      await psychologistService.downloadReportDocx(sessionId, 'psychologist');
+    } catch {
+      showMessage('Ошибка генерации отчёта');
+    }
+  };
+
+  const getPsychologistName = (ownerId) => {
+    const psych = psychologists.find(p => p.id === ownerId);
+    return psych ? psych.full_name : 'Неизвестно';
+  };
+
+  const getTestLink = (uniqueLink) => {
+    return `${window.location.origin}/form/${uniqueLink}`;
+  };
+
+  const getTestTitle = (testId) => {
+    const test = tests.find(t => t.id === testId);
+    return test ? test.title : 'Неизвестно';
   };
 
   if (loading) return <div className="container">Загрузка...</div>;
@@ -110,16 +145,18 @@ export const AdminDashboard = () => {
         <button onClick={() => setActiveTab('sessions')} className={activeTab === 'sessions' ? 'btn btn-primary' : 'btn'}>Сессии</button>
       </div>
 
+      {/* ПРОФИЛЬ */}
       {activeTab === 'profile' && user && (
         <div className="card">
           <h2>Профиль</h2>
-          <p><strong>Имя:</strong> {user.name}</p>
+          <p><strong>Имя:</strong> {user.full_name}</p>
           <p><strong>Email:</strong> {user.email}</p>
           <p><strong>Роль:</strong> Администратор</p>
           <p><strong>Дата регистрации:</strong> {new Date(user.created_at).toLocaleDateString()}</p>
         </div>
       )}
 
+      {/* ПСИХОЛОГИ */}
       {activeTab === 'psychologists' && (
         <div>
           <button onClick={() => setShowCreateForm(!showCreateForm)} className="btn btn-primary" style={{ marginBottom: '1rem' }}>
@@ -139,7 +176,7 @@ export const AdminDashboard = () => {
                 </div>
                 <div className="form-group">
                   <label>ФИО *</label>
-                  <input type="text" value={newPsych.name} onChange={e => setNewPsych({ ...newPsych, name: e.target.value })} required />
+                  <input type="text" value={newPsych.full_name} onChange={e => setNewPsych({ ...newPsych, full_name: e.target.value })} required />
                 </div>
                 <button type="submit" className="btn btn-primary">Создать</button>
                 <button type="button" onClick={() => setShowCreateForm(false)} className="btn btn-outline" style={{ marginLeft: '0.5rem' }}>Отмена</button>
@@ -148,14 +185,15 @@ export const AdminDashboard = () => {
           )}
 
           <div className="card">
-            <h3>Список психологов</h3>
+            <h3>Список психологов ({psychologists.length})</h3>
             <div style={{ overflowX: 'auto' }}>
               <table className="table">
                 <thead>
                   <tr>
-                    <th>Имя</th>
+                    <th>ФИО</th>
                     <th>Email</th>
                     <th>Статус</th>
+                    <th>Доступ до</th>
                     <th>Дата регистрации</th>
                     <th>Действия</th>
                   </tr>
@@ -163,9 +201,18 @@ export const AdminDashboard = () => {
                 <tbody>
                   {psychologists.map(p => (
                     <tr key={p.id}>
-                      <td>{p.name}</td>
+                      <td>{p.full_name}</td>
                       <td>{p.email}</td>
-                      <td>{p.active ? 'Активен' : 'Деактивирован'}</td>
+                      <td>
+                        <span style={{
+                          background: p.is_active ? '#dcfce7' : '#fee2e2',
+                          color: p.is_active ? '#166534' : '#991b1b',
+                          padding: '2px 8px', borderRadius: '12px', fontSize: '0.8rem'
+                        }}>
+                          {p.is_active ? 'Активен' : 'Заблокирован'}
+                        </span>
+                      </td>
+                      <td>{p.access_until ? new Date(p.access_until).toLocaleDateString() : 'Не задано'}</td>
                       <td>{new Date(p.created_at).toLocaleDateString()}</td>
                       <td>
                         {editingPsych === p.id ? (
@@ -175,14 +222,21 @@ export const AdminDashboard = () => {
                             onCancel={() => setEditingPsych(null)}
                           />
                         ) : (
-                          <>
-                            <button onClick={() => setEditingPsych(p.id)} className="btn btn-outline" style={{ marginRight: '0.5rem' }}>Редактировать</button>
-                            <button onClick={() => handleDeletePsychologist(p.id)} className="btn btn-danger">Удалить</button>
-                          </>
+                          <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
+                            <button onClick={() => setEditingPsych(p.id)} className="btn btn-outline">✏️</button>
+                            <button onClick={() => handleBlockPsychologist(p.id, p.is_active)} className="btn btn-outline">
+                              {p.is_active ? '🔒' : '🔓'}
+                            </button>
+                            <button onClick={() => handleExtendAccess(p.id)} className="btn btn-outline">📅</button>
+                            <button onClick={() => handleDeletePsychologist(p.id)} className="btn btn-danger">🗑️</button>
+                          </div>
                         )}
                       </td>
                     </tr>
                   ))}
+                  {psychologists.length === 0 && (
+                    <tr><td colSpan="6" style={{ textAlign: 'center' }}>Психологов пока нет</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -190,43 +244,52 @@ export const AdminDashboard = () => {
         </div>
       )}
 
+      {/* ТЕСТЫ */}
       {activeTab === 'tests' && (
         <div className="card">
-          <h3>Все тесты психологов</h3>
+          <h3>Все тесты ({tests.length})</h3>
           <div style={{ overflowX: 'auto' }}>
             <table className="table">
               <thead>
                 <tr>
-                  <th>Название теста</th>
+                  <th>Название</th>
                   <th>Автор</th>
                   <th>Опубликован</th>
-                  <th>Кол-во вопросов</th>
-                  <th>Кол-во прохождений</th>
+                  <th>Вопросов</th>
+                  <th>Прохождений</th>
                   <th>Дата создания</th>
                   <th>Ссылка</th>
                 </tr>
               </thead>
               <tbody>
-                {forms.map(form => (
-                  <tr key={form.id}>
-                    <td>{form.title}</td>
-                    <td>{getPsychologistName(form.psychologistId)}</td>
-                    <td>{form.published ? 'Да' : 'Нет'}</td>
-                    <td>{form.questions.length}</td>
-                    <td>{form.completions || 0}</td>
-                    <td>{new Date(form.createdAt).toLocaleDateString()}</td>
-                    <td><a href={getFormLink(form.id)} target="_blank" rel="noopener noreferrer">Ссылка</a></td>
+                {tests.map(test => (
+                  <tr key={test.id}>
+                    <td>{test.title}</td>
+                    <td>{getPsychologistName(test.owner_id)}</td>
+                    <td>{test.is_published ? '✅' : '❌'}</td>
+                    <td>{test.questions_count || 0}</td>
+                    <td>{test.sessions_count || 0}</td>
+                    <td>{new Date(test.created_at).toLocaleDateString()}</td>
+                    <td>
+                      {test.unique_link ? (
+                        <a href={getTestLink(test.unique_link)} target="_blank" rel="noopener noreferrer">Ссылка</a>
+                      ) : '—'}
+                    </td>
                   </tr>
                 ))}
+                {tests.length === 0 && (
+                  <tr><td colSpan="7" style={{ textAlign: 'center' }}>Тестов пока нет</td></tr>
+                )}
               </tbody>
             </table>
           </div>
         </div>
       )}
 
+      {/* СЕССИИ */}
       {activeTab === 'sessions' && (
         <div className="card">
-          <h3>Все сессии (прохождения тестов)</h3>
+          <h3>Все прохождения ({sessions.length})</h3>
           <div style={{ overflowX: 'auto' }}>
             <table className="table">
               <thead>
@@ -240,19 +303,31 @@ export const AdminDashboard = () => {
                 </tr>
               </thead>
               <tbody>
-                {responses.map(resp => {
-                  const form = forms.find(f => f.id === resp.formId);
-                  return (
-                    <tr key={resp.id}>
-                      <td>{resp.clientName}</td>
-                      <td>{form ? form.title : 'Неизвестно'}</td>
-                      <td>{resp.status}</td>
-                      <td>{new Date(resp.startedAt).toLocaleString()}</td>
-                      <td>{new Date(resp.completedAt).toLocaleString()}</td>
-                      <td><button onClick={() => handleReport(resp.id)} className="btn btn-outline">Отчёт</button></td>
-                    </tr>
-                  );
-                })}
+                {sessions.map(sess => (
+                  <tr key={sess.id}>
+                    <td>{sess.client_name || 'Аноним'}</td>
+                    <td>{getTestTitle(sess.test_id)}</td>
+                    <td>
+                      <span style={{
+                        background: sess.status === 'completed' ? '#dcfce7' : '#fef3c7',
+                        color: sess.status === 'completed' ? '#166534' : '#92400e',
+                        padding: '2px 8px', borderRadius: '12px', fontSize: '0.8rem'
+                      }}>
+                        {sess.status === 'completed' ? 'Завершён' : 'В процессе'}
+                      </span>
+                    </td>
+                    <td>{new Date(sess.created_at).toLocaleString()}</td>
+                    <td>{sess.completed_at ? new Date(sess.completed_at).toLocaleString() : '—'}</td>
+                    <td>
+                      {sess.status === 'completed' && (
+                        <button onClick={() => handleReport(sess.id)} className="btn btn-outline">📄 Скачать</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {sessions.length === 0 && (
+                  <tr><td colSpan="6" style={{ textAlign: 'center' }}>Прохождений пока нет</td></tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -262,27 +337,22 @@ export const AdminDashboard = () => {
   );
 };
 
-// Компонент формы редактирования психолога (синхронный, так как сохранение происходит в родителе)
+// Компонент редактирования психолога
 const EditPsychForm = ({ psych, onSave, onCancel }) => {
-  const [name, setName] = useState(psych.name);
+  const [full_name, setFullName] = useState(psych.full_name);
   const [email, setEmail] = useState(psych.email);
-  const [active, setActive] = useState(psych.active);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave({ name, email, active });
+    onSave({ full_name, email });
   };
 
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-      <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="Имя" />
+      <input type="text" value={full_name} onChange={e => setFullName(e.target.value)} placeholder="ФИО" />
       <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" />
-      <label style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}>
-        Активен
-        <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} />
-      </label>
-      <button type="submit" className="btn btn-primary">Сохранить</button>
-      <button type="button" onClick={onCancel} className="btn btn-outline">Отмена</button>
+      <button type="submit" className="btn btn-primary">💾</button>
+      <button type="button" onClick={onCancel} className="btn btn-outline">✖</button>
     </form>
   );
 };

@@ -19,37 +19,20 @@ export const authService = {
     }
   },
 
-  register: async (email, password, full_name, role = 'psychologist') => {
-    try {
-      const response = await api.post('/auth/register', {
-        email,
-        password,
-        full_name,
-        role,
-      });
-      return response.data;
-    } catch (error) {
-      const message = error.response?.data?.detail || 'Ошибка регистрации';
-      throw new Error(message);
-    }
-  },
-
   logout: () => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('user');
   },
 
-  updateProfile: async (userId, updates) => {
-    const response = await api.patch(`/users/${userId}`, updates);
-    const updatedUser = response.data;
-    localStorage.setItem('user', JSON.stringify(updatedUser));
-    return updatedUser;
+  getMe: async () => {
+    const response = await api.get('/auth/me');
+    return response.data;
   },
 
   // Админские методы
   getAllPsychologists: async () => {
     const response = await api.get('/users/?role=psychologist');
-    return response.data;
+    return response.data.users;
   },
 
   createPsychologist: async (email, password, full_name) => {

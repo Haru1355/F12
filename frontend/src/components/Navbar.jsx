@@ -12,30 +12,26 @@ export const Navbar = () => {
 
   return (
     <nav className="navbar">
-      <div className="container">
-        <Link to="/" className="navbar-brand">ПсихоПлатформа</Link>
-        <div className="navbar-nav">
+      <div className="container" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Link to="/" className="navbar-brand">ПрофДНК</Link>
+        <div className="navbar-nav" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           {!user ? (
-            <>
-              <Link to="/login" className="nav-link">Вход</Link>
-              <Link to="/register" className="nav-link">Регистрация</Link>
-            </>
+            <Link to="/login" className="nav-link">Вход</Link>
           ) : (
             <>
               {user.role === 'admin' && (
                 <>
-                  <Link to="/admin/profile" className="nav-link">Мой профиль</Link>
-                  <Link to="/admin" className="nav-link">Психологи</Link>
-                  <Link to="/admin/tests" className="nav-link">Все тесты</Link>
-                  <Link to="/admin/sessions" className="nav-link">Сессии</Link>
+                  <Link to="/admin" className="nav-link">Панель админа</Link>
+                  <Link to="/admin/profile" className="nav-link">Профиль</Link>
                 </>
               )}
               {user.role === 'psychologist' && (
                 <>
-                  <Link to="/psychologist/profile" className="nav-link">Мой профиль</Link>
-                  <Link to="/psychologist" className="nav-link">Опросы</Link>
+                  <Link to="/psychologist" className="nav-link">Мои тесты</Link>
+                  <Link to="/psychologist/profile" className="nav-link">Профиль</Link>
                 </>
               )}
+              <span style={{ color: '#64748b', fontSize: '0.9rem' }}>{user.full_name}</span>
               <button onClick={handleLogout} className="btn btn-outline">Выйти</button>
             </>
           )}
