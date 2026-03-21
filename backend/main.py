@@ -29,6 +29,7 @@ async def lifespan(app: FastAPI):
                 hashed_password=hash_password(settings.ADMIN_PASSWORD),
                 full_name="Администратор",
                 role="admin",
+                access_until=None,  # 🆕 Бессрочный доступ для админа
             )
             session.add(admin)
             await session.commit()

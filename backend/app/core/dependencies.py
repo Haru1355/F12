@@ -2,6 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from datetime import datetime
 
 from app.core.database import get_session
 from app.core.security import decode_access_token
@@ -39,6 +40,18 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Пользователь деактивирован",
+        )
+
+    if not user.has_active_access():
+        if user.access_until:
+            expired_date = user.access_until.strftime('%d.%m.%Y %H:%M')
+            detail = f"Срок доступа истёк {expired_date}. Обратитесь к администратору."
+        else:
+            detail = "Доступ к системе ограничен. Обратитесь к администратору."
+        
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=detail,
         )
 
     return user
