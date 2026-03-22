@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
+import os
 
 from app.core.config import settings
 from app.core.database import engine, async_session_factory
@@ -12,11 +14,9 @@ from app.api.v1 import api_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Создаём таблицы
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    # Создаём администратора если не существует
     async with async_session_factory() as session:
         result = await session.execute(
             select(User).where(User.email == settings.ADMIN_EMAIL)
@@ -31,12 +31,11 @@ async def lifespan(app: FastAPI):
             )
             session.add(admin)
             await session.commit()
-            print(f"Администратор создан: {settings.ADMIN_EMAIL}")
+            print(f"✅ Администратор создан: {settings.ADMIN_EMAIL}")
         else:
-            print(f"Администратор уже существует: {settings.ADMIN_EMAIL}")
+            print(f"ℹ️ Администратор уже существует: {settings.ADMIN_EMAIL}")
 
     yield
-
     await engine.dispose()
 
 
@@ -47,19 +46,21 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        settings.FRONTEND_URL,
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-    ],
+    allow_origins=["*"],  # для разработки разрешаем все
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Статика (аватары)
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+os.makedirs(static_dir, exist_ok=True)
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+# Роуты
 app.include_router(api_router, prefix=settings.API_V1_PREFIX)
 
 
