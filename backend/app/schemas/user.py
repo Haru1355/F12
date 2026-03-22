@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional, Any
 from datetime import datetime
 
@@ -53,7 +53,7 @@ class UserResponse(BaseModel):
     role: str
     is_active: bool
     access_until: Optional[datetime] = None
-    has_active_access: bool = True
+    # ← убрали has_active_access отсюда
     phone: Optional[str] = None
     telegram: Optional[str] = None
     education_level: Optional[str] = None
@@ -63,33 +63,16 @@ class UserResponse(BaseModel):
 
     model_config = {"from_attributes": True}
 
-    @model_validator(mode='before')
-    @classmethod
-    def compute_has_active_access(cls, obj: Any) -> Any:
-        """Вычисляем has_active_access до валидации."""
-        if hasattr(obj, 'has_active_access') and callable(obj.has_active_access):
-            # SQLAlchemy объект — вызываем метод и сохраняем результат
-            try:
-                result = obj.has_active_access()
-                # Создаём обёртку чтобы передать вычисленное значение
-                return {
-                    "id": obj.id,
-                    "email": obj.email,
-                    "full_name": obj.full_name,
-                    "role": obj.role,
-                    "is_active": obj.is_active,
-                    "access_until": obj.access_until,
-                    "has_active_access": result,
-                    "phone": getattr(obj, 'phone', None),
-                    "telegram": getattr(obj, 'telegram', None),
-                    "education_level": getattr(obj, 'education_level', None),
-                    "bio": getattr(obj, 'bio', None),
-                    "avatar_url": getattr(obj, 'avatar_url', None),
-                    "created_at": obj.created_at,
-                }
-            except Exception:
-                pass
-        return obj
+    @property
+    def has_active_access(self) -> bool:
+        """Вычисляется на фронте по полям is_active и access_until."""
+        if not self.is_active:
+            return False
+        if self.role == "admin":
+            return True
+        if self.access_until is None:
+            return True
+        return self.access_until > datetime.utcnow()
 
 
 class UserListResponse(BaseModel):

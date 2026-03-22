@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import String, Boolean, Integer, DateTime, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -20,14 +20,10 @@ class User(Base, TimestampMixin):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(50), nullable=False, default="psychologist")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-
-    # Доступ (подписка)
     access_until: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True,
         comment="Дата окончания доступа (null = бессрочно)"
     )
-
-    # Поля профиля
     phone: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     telegram: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     education_level: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -42,11 +38,15 @@ class User(Base, TimestampMixin):
         return f"<User(id={self.id}, email='{self.email}', role='{self.role}')>"
 
     def has_active_access(self) -> bool:
-        """Проверяет активность доступа."""
         if not self.is_active:
             return False
         if self.role == "admin":
             return True
         if self.access_until is None:
             return True
-        return self.access_until > datetime.utcnow()
+        now = datetime.now(timezone.utc)
+        if self.access_until.tzinfo is None:
+            access_until_aware = self.access_until.replace(tzinfo=timezone.utc)
+        else:
+            access_until_aware = self.access_until
+        return access_until_aware > now
