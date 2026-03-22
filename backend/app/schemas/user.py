@@ -1,5 +1,5 @@
-from pydantic import BaseModel, EmailStr, Field, field_validator
-from typing import Optional
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from typing import Optional, Any
 from datetime import datetime
 
 
@@ -38,7 +38,6 @@ class UserUpdate(BaseModel):
 
 
 class ProfileUpdate(BaseModel):
-    """Психолог редактирует собственный профиль."""
     full_name: Optional[str] = None
     phone: Optional[str] = None
     telegram: Optional[str] = None
@@ -62,15 +61,35 @@ class UserResponse(BaseModel):
     avatar_url: Optional[str] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
+    @model_validator(mode='before')
     @classmethod
-    def model_validate(cls, obj, **kwargs):
-        data = super().model_validate(obj, **kwargs)
-        if hasattr(obj, 'has_active_access'):
-            data.has_active_access = obj.has_active_access()
-        return data
+    def compute_has_active_access(cls, obj: Any) -> Any:
+        """Вычисляем has_active_access до валидации."""
+        if hasattr(obj, 'has_active_access') and callable(obj.has_active_access):
+            # SQLAlchemy объект — вызываем метод и сохраняем результат
+            try:
+                result = obj.has_active_access()
+                # Создаём обёртку чтобы передать вычисленное значение
+                return {
+                    "id": obj.id,
+                    "email": obj.email,
+                    "full_name": obj.full_name,
+                    "role": obj.role,
+                    "is_active": obj.is_active,
+                    "access_until": obj.access_until,
+                    "has_active_access": result,
+                    "phone": getattr(obj, 'phone', None),
+                    "telegram": getattr(obj, 'telegram', None),
+                    "education_level": getattr(obj, 'education_level', None),
+                    "bio": getattr(obj, 'bio', None),
+                    "avatar_url": getattr(obj, 'avatar_url', None),
+                    "created_at": obj.created_at,
+                }
+            except Exception:
+                pass
+        return obj
 
 
 class UserListResponse(BaseModel):
