@@ -6,7 +6,8 @@ pycache/
 *.pyd
 .Python
 *.so
-
+__pycache__/
+*.pyc
 # Virtual environment
 venv/
 env/
