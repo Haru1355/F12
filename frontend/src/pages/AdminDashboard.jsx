@@ -35,6 +35,35 @@ const Badge = ({ active }) => (
   </span>
 );
 
+const AccessBadge = ({ accessUntil }) => {
+  if (!accessUntil) return (
+    <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>∞ Бессрочно</span>
+  );
+
+  const date = new Date(accessUntil);
+  const now = new Date();
+  const daysLeft = Math.ceil((date - now) / (1000 * 60 * 60 * 24));
+  const isExpired = daysLeft <= 0;
+  const isWarning = daysLeft > 0 && daysLeft <= 7;
+
+  return (
+    <div>
+      <div style={{
+        fontSize: '0.85rem', fontWeight: '600',
+        color: isExpired ? '#991b1b' : isWarning ? '#92400e' : '#1e293b',
+      }}>
+        📅 {date.toLocaleDateString('ru-RU')}
+      </div>
+      <div style={{
+        fontSize: '0.75rem',
+        color: isExpired ? '#ef4444' : isWarning ? '#f59e0b' : '#94a3b8',
+      }}>
+        {isExpired ? '⛔ Истёк' : isWarning ? `⚠️ ${daysLeft} дн.` : `${daysLeft} дн.`}
+      </div>
+    </div>
+  );
+};
+
 export const AdminDashboard = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
@@ -43,7 +72,9 @@ export const AdminDashboard = () => {
   const [sessions, setSessions] = useState([]);
   const [editingPsych, setEditingPsych] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newPsych, setNewPsych] = useState({ email: '', password: '', full_name: '' });
+  const [newPsych, setNewPsych] = useState({
+    email: '', password: '', full_name: '', accessDays: '30',
+  });
   const [message, setMessage] = useState({ text: '', type: '' });
   const [loading, setLoading] = useState(false);
 
@@ -59,7 +90,7 @@ export const AdminDashboard = () => {
       setTests(allTests);
       setSessions(allSessions);
     } catch (err) {
-      showMsg(err.message, 'error');
+      showMsg(err.message || 'Ошибка загрузки', 'error');
     } finally {
       setLoading(false);
     }
@@ -69,18 +100,25 @@ export const AdminDashboard = () => {
 
   const showMsg = (text, type = 'success') => {
     setMessage({ text, type });
-    setTimeout(() => setMessage({ text: '', type: '' }), 3000);
+    setTimeout(() => setMessage({ text: '', type: '' }), 4000);
   };
 
   const handleCreate = async (e) => {
     e.preventDefault();
     try {
-      await authService.createPsychologist(newPsych.email, newPsych.password, newPsych.full_name);
+      await authService.createPsychologist(
+        newPsych.email,
+        newPsych.password,
+        newPsych.full_name,
+        newPsych.accessDays || null,
+      );
       showMsg('✅ Психолог создан');
-      setNewPsych({ email: '', password: '', full_name: '' });
+      setNewPsych({ email: '', password: '', full_name: '', accessDays: '30' });
       setShowCreateForm(false);
       await loadData();
-    } catch (err) { showMsg(err.message, 'error'); }
+    } catch (err) {
+      showMsg(err.response?.data?.detail || err.message || 'Ошибка создания', 'error');
+    }
   };
 
   const handleUpdate = async (id, updates) => {
@@ -89,16 +127,20 @@ export const AdminDashboard = () => {
       showMsg('✅ Данные обновлены');
       setEditingPsych(null);
       await loadData();
-    } catch { showMsg('Ошибка обновления', 'error'); }
+    } catch {
+      showMsg('Ошибка обновления', 'error');
+    }
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Удалить психолога?')) {
+    if (window.confirm('Удалить психолога? Все его тесты и данные будут удалены.')) {
       try {
         await authService.deletePsychologist(id);
         showMsg('✅ Психолог удалён');
         await loadData();
-      } catch { showMsg('Ошибка удаления', 'error'); }
+      } catch {
+        showMsg('Ошибка удаления', 'error');
+      }
     }
   };
 
@@ -108,24 +150,54 @@ export const AdminDashboard = () => {
       else await authService.unblockPsychologist(id);
       showMsg(isActive ? '🔒 Заблокирован' : '🔓 Разблокирован');
       await loadData();
-    } catch { showMsg('Ошибка', 'error'); }
+    } catch {
+      showMsg('Ошибка', 'error');
+    }
   };
 
   const handleExtend = async (id) => {
     const days = prompt('На сколько дней продлить доступ?', '30');
-    if (days) {
+    if (days && parseInt(days) > 0) {
       try {
-        await authService.extendAccess(id, parseInt(days));
-        showMsg(`✅ Доступ продлён на ${days} дней`);
+        const result = await authService.extendAccess(id, parseInt(days));
+        showMsg(`✅ ${result.message}`);
         await loadData();
-      } catch { showMsg('Ошибка продления', 'error'); }
+      } catch {
+        showMsg('Ошибка продления', 'error');
+      }
+    }
+  };
+
+  const handleSetUnlimited = async (id) => {
+    if (window.confirm('Установить бессрочный доступ?')) {
+      try {
+        await authService.setUnlimitedAccess(id);
+        showMsg('✅ Бессрочный доступ установлен');
+        await loadData();
+      } catch {
+        showMsg('Ошибка', 'error');
+      }
+    }
+  };
+
+  const handleRevoke = async (id) => {
+    if (window.confirm('Отозвать доступ немедленно?')) {
+      try {
+        await authService.revokeAccess(id);
+        showMsg('🔒 Доступ отозван');
+        await loadData();
+      } catch {
+        showMsg('Ошибка', 'error');
+      }
     }
   };
 
   const handleReport = async (sessionId) => {
     try {
       await psychologistService.downloadReportDocx(sessionId, 'psychologist');
-    } catch { showMsg('Ошибка генерации отчёта', 'error'); }
+    } catch {
+      showMsg('Ошибка генерации отчёта', 'error');
+    }
   };
 
   const getPsychName = (ownerId) => {
@@ -153,7 +225,6 @@ export const AdminDashboard = () => {
     <div style={{ background: '#f0f9ff', minHeight: '100vh', padding: '32px 0' }}>
       <div className="container">
 
-        {/* Заголовок */}
         <div style={{ marginBottom: '32px' }}>
           <h1 style={{ fontSize: '1.8rem', fontWeight: '800', color: '#1e293b' }}>
             Панель администратора
@@ -163,7 +234,6 @@ export const AdminDashboard = () => {
           </p>
         </div>
 
-        {/* Сообщение */}
         {message.text && (
           <div className={`alert alert-${message.type === 'error' ? 'error' : 'success'}`}>
             {message.text}
@@ -234,7 +304,6 @@ export const AdminDashboard = () => {
                 </span>
               </div>
             </div>
-
             <div style={{
               display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
               gap: '16px',
@@ -243,7 +312,7 @@ export const AdminDashboard = () => {
                 { label: 'Email', value: user.email, emoji: '📧' },
                 { label: 'Роль', value: 'Администратор', emoji: '👑' },
                 { label: 'Статус', value: 'Активен', emoji: '✅' },
-                { label: 'Дата регистрации', value: new Date(user.created_at).toLocaleDateString('ru-RU'), emoji: '📅' },
+                { label: 'Регистрация', value: new Date(user.created_at).toLocaleDateString('ru-RU'), emoji: '📅' },
               ].map(item => (
                 <div key={item.label} style={{
                   background: '#f8fafc', borderRadius: '14px', padding: '16px',
@@ -261,7 +330,6 @@ export const AdminDashboard = () => {
         {/* ПСИХОЛОГИ */}
         {activeTab === 'psychologists' && (
           <div>
-            {/* Кнопка создать */}
             <div style={{ marginBottom: '20px' }}>
               <button onClick={() => setShowCreateForm(!showCreateForm)} style={{
                 background: 'linear-gradient(135deg, #0369a1, #0d9488)',
@@ -274,7 +342,6 @@ export const AdminDashboard = () => {
               </button>
             </div>
 
-            {/* Форма создания */}
             {showCreateForm && (
               <div style={{
                 background: 'white', borderRadius: '24px', padding: '32px',
@@ -289,36 +356,51 @@ export const AdminDashboard = () => {
                     <div className="form-group">
                       <label>Email *</label>
                       <input type="email" value={newPsych.email}
-                        onChange={e => setNewPsych({ ...newPsych, email: e.target.value })} required />
+                        onChange={e => setNewPsych({ ...newPsych, email: e.target.value })}
+                        required placeholder="email@example.com" />
                     </div>
                     <div className="form-group">
                       <label>Пароль *</label>
                       <input type="password" value={newPsych.password}
-                        onChange={e => setNewPsych({ ...newPsych, password: e.target.value })} required />
+                        onChange={e => setNewPsych({ ...newPsych, password: e.target.value })}
+                        required placeholder="Минимум 8 символов" />
                     </div>
                     <div className="form-group">
                       <label>ФИО *</label>
                       <input type="text" value={newPsych.full_name}
-                        onChange={e => setNewPsych({ ...newPsych, full_name: e.target.value })} required />
+                        onChange={e => setNewPsych({ ...newPsych, full_name: e.target.value })}
+                        required placeholder="Иванов Иван Иванович" />
+                    </div>
+                    <div className="form-group">
+                      <label>Дней доступа</label>
+                      <input
+                        type="number"
+                        value={newPsych.accessDays}
+                        onChange={e => setNewPsych({ ...newPsych, accessDays: e.target.value })}
+                        placeholder="Пусто = бессрочно"
+                        min="1" max="3650"
+                      />
+                      <small style={{ color: '#94a3b8', fontSize: '0.75rem' }}>
+                        Оставьте пустым для бессрочного доступа
+                      </small>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
-                    <button type="submit" className="btn btn-primary">Создать</button>
-                    <button type="button" onClick={() => setShowCreateForm(false)} className="btn btn-outline">Отмена</button>
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+                    <button type="submit" className="btn btn-primary">✅ Создать</button>
+                    <button type="button" onClick={() => setShowCreateForm(false)} className="btn btn-outline">
+                      Отмена
+                    </button>
                   </div>
                 </form>
               </div>
             )}
 
-            {/* Список психологов */}
             <div style={{
               background: 'white', borderRadius: '24px',
               boxShadow: '0 4px 20px rgba(0,0,0,0.06)', overflow: 'hidden',
             }}>
               <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9' }}>
-                <h3 style={{ fontWeight: '700', color: '#1e293b' }}>
-                  Список психологов
-                </h3>
+                <h3 style={{ fontWeight: '700', color: '#1e293b' }}>Список психологов</h3>
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table className="table">
@@ -351,15 +433,7 @@ export const AdminDashboard = () => {
                           </div>
                         </td>
                         <td><Badge active={p.is_active} /></td>
-                        <td>
-                          {p.access_until ? (
-                            <span style={{ fontSize: '0.85rem', color: '#1e293b', fontWeight: '500' }}>
-                              📅 {new Date(p.access_until).toLocaleDateString('ru-RU')}
-                            </span>
-                          ) : (
-                            <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Не задано</span>
-                          )}
-                        </td>
+                        <td><AccessBadge accessUntil={p.access_until} /></td>
                         <td style={{ color: '#64748b', fontSize: '0.85rem' }}>
                           {new Date(p.created_at).toLocaleDateString('ru-RU')}
                         </td>
@@ -374,19 +448,32 @@ export const AdminDashboard = () => {
                             <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
                               <button onClick={() => setEditingPsych(p.id)}
                                 className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
-                                ✏️ Ред.
+                                ✏️
                               </button>
                               <button onClick={() => handleBlock(p.id, p.is_active)}
                                 className={`btn ${p.is_active ? 'btn-danger' : 'btn-success'}`}
-                                style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
+                                style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                title={p.is_active ? 'Заблокировать' : 'Разблокировать'}>
                                 {p.is_active ? '🔒' : '🔓'}
                               </button>
                               <button onClick={() => handleExtend(p.id)}
-                                className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
+                                className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                title="Продлить доступ">
                                 📅
                               </button>
+                              <button onClick={() => handleSetUnlimited(p.id)}
+                                className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                title="Бессрочный доступ">
+                                ∞
+                              </button>
+                              <button onClick={() => handleRevoke(p.id)}
+                                className="btn btn-danger" style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                title="Отозвать доступ">
+                                ⛔
+                              </button>
                               <button onClick={() => handleDelete(p.id)}
-                                className="btn btn-danger" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
+                                className="btn btn-danger" style={{ padding: '6px 12px', fontSize: '0.8rem' }}
+                                title="Удалить">
                                 🗑️
                               </button>
                             </div>
@@ -398,7 +485,7 @@ export const AdminDashboard = () => {
                       <tr>
                         <td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
                           <div style={{ fontSize: '2rem', marginBottom: '8px' }}>👥</div>
-                          Психологов пока нет
+                          Психологов пока нет. Нажмите «+ Добавить психолога»
                         </td>
                       </tr>
                     )}
@@ -456,7 +543,7 @@ export const AdminDashboard = () => {
                           <a href={`${window.location.origin}/form/${test.unique_link}`}
                             target="_blank" rel="noopener noreferrer"
                             style={{ color: '#0369a1', fontSize: '0.85rem', fontWeight: '500' }}>
-                            🔗 Ссылка
+                            🔗 Открыть
                           </a>
                         ) : '—'}
                       </td>
@@ -529,7 +616,9 @@ export const AdminDashboard = () => {
                           {new Date(sess.created_at).toLocaleString('ru-RU')}
                         </td>
                         <td style={{ color: '#64748b', fontSize: '0.85rem' }}>
-                          {sess.completed_at ? new Date(sess.completed_at).toLocaleString('ru-RU') : '—'}
+                          {sess.completed_at
+                            ? new Date(sess.completed_at).toLocaleString('ru-RU')
+                            : '—'}
                         </td>
                         <td>
                           {sess.status === 'completed' && (

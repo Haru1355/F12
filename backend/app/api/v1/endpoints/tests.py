@@ -22,6 +22,13 @@ from app.models.user import User
 
 router = APIRouter()
 
+DEFAULT_CLIENT_FIELDS = {
+    "fields": [
+        {"key": "full_name", "label": "ФИО", "required": True, "enabled": True, "removable": False},
+        {"key": "email", "label": "Email", "required": False, "enabled": True, "removable": True},
+    ]
+}
+
 
 async def _load_test_with_relations(session: AsyncSession, test_id: int):
     """Загрузить тест со всеми relations через selectinload."""
@@ -43,7 +50,6 @@ async def create_test_endpoint(
     current_user: User = Depends(get_current_psychologist),
 ):
     test = await create_test(session, data, current_user.id)
-    # Перезагружаем с relations чтобы избежать MissingGreenlet
     test = await _load_test_with_relations(session, test.id)
     return _test_to_response(test)
 
@@ -87,10 +93,14 @@ async def get_test_by_link_endpoint(
                 scale_config=q.scale_config, options=options,
             )
         )
+
+    client_fields = test.client_fields or DEFAULT_CLIENT_FIELDS
+
     return TestPublicResponse(
         id=test.id,
         title=test.title,
         description=test.description,
+        client_fields=client_fields,
         questions=questions,
     )
 
@@ -116,14 +126,12 @@ async def update_test_endpoint(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_psychologist),
 ):
-    # Загружаем С relations сразу
     test = await _load_test_with_relations(session, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Тест не найден")
     if current_user.role != "admin" and test.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Нет доступа")
     updated = await update_test(session, test, data)
-    # Перезагружаем после обновления
     updated = await _load_test_with_relations(session, test_id)
     return _test_to_response(updated)
 
@@ -153,17 +161,13 @@ async def regenerate_link_endpoint(
         raise HTTPException(status_code=404, detail="Тест не найден")
     if current_user.role != "admin" and test.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Нет доступа")
-    updated = await regenerate_link(session, test)
+    await regenerate_link(session, test)
     updated = await _load_test_with_relations(session, test_id)
     return _test_to_response(updated)
 
 
 def _test_to_response(test) -> TestResponse:
-    """
-    Безопасное создание ответа.
-    Считаем questions/sessions только если они уже загружены в памяти.
-    """
-    # Проверяем загружены ли relations через __dict__
+    """Безопасное создание ответа без lazy load."""
     questions_count = 0
     sessions_count = 0
 
@@ -182,6 +186,7 @@ def _test_to_response(test) -> TestResponse:
         unique_link=test.unique_link,
         show_result_to_client=test.show_result_to_client,
         scoring_config=test.scoring_config,
+        client_fields=test.client_fields or DEFAULT_CLIENT_FIELDS,
         created_at=test.created_at,
         updated_at=test.updated_at,
         questions_count=questions_count,

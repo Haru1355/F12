@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -11,6 +12,14 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:5173"
     PROJECT_NAME: str = "ПрофДНК API"
     API_V1_PREFIX: str = "/api/v1"
+
+    # Email
+    MAIL_USERNAME: Optional[str] = None
+    MAIL_PASSWORD: Optional[str] = None
+    MAIL_FROM: Optional[str] = None
+    MAIL_PORT: int = 587
+    MAIL_SERVER: str = "smtp.gmail.com"
+    MAIL_FROM_NAME: str = "ПрофДНК"
 
     class Config:
         env_file = ".env"

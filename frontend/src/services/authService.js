@@ -45,15 +45,28 @@ export const authService = {
     return response.data;
   },
 
-  // Админские методы
+  // ── Админские методы ──
+
   getAllPsychologists: async () => {
-    const response = await api.get('/users/?role=psychologist');
+    const response = await api.get('/users/', {
+      params: { role: 'psychologist', limit: 500 },
+    });
     return response.data.users;
   },
 
-  createPsychologist: async (email, password, full_name) => {
+  createPsychologist: async (email, password, full_name, accessDays = null) => {
+    let access_until = null;
+    if (accessDays && parseInt(accessDays) > 0) {
+      const date = new Date();
+      date.setDate(date.getDate() + parseInt(accessDays));
+      access_until = date.toISOString();
+    }
     const response = await api.post('/auth/register', {
-      email, password, full_name, role: 'psychologist',
+      email,
+      password,
+      full_name,
+      role: 'psychologist',
+      access_until,
     });
     return response.data;
   },
@@ -67,15 +80,6 @@ export const authService = {
     await api.delete(`/users/${id}`);
   },
 
-  // ✅ Исправлено: POST с телом вместо PATCH
-  extendAccess: async (id, days = 30) => {
-    const response = await api.post(`/users/${id}/extend-access`, {
-      days: parseInt(days),
-    });
-    return response.data;
-  },
-
-  // ✅ Исправлено: PATCH с полем вместо /block
   blockPsychologist: async (id) => {
     const response = await api.patch(`/users/${id}`, { is_active: false });
     return response.data;
@@ -86,20 +90,27 @@ export const authService = {
     return response.data;
   },
 
+  extendAccess: async (id, days) => {
+    const response = await api.post(`/users/${id}/extend-access`, {
+      days: parseInt(days),
+    });
+    return response.data;
+  },
+
+  setUnlimitedAccess: async (id) => {
+    const response = await api.post(`/users/${id}/set-unlimited-access`);
+    return response.data;
+  },
+
   revokeAccess: async (id) => {
     const response = await api.post(`/users/${id}/revoke-access`);
     return response.data;
   },
 
-  extendAccess: async (_id, days = 30) => {
-    // Заглушка — endpoint не реализован в backend
-    console.warn('extendAccess: endpoint не реализован');
-    return { message: `Доступ продлён на ${days} дней` };
-  },
-
-  revokeAccess: async () => {
-    // Заглушка — endpoint не реализован в backend
-    console.warn('revokeAccess: endpoint не реализован');
-    return { message: 'Доступ отозван' };
+  getExpiringAccess: async (days = 7) => {
+    const response = await api.get('/users/expiring-access', {
+      params: { days },
+    });
+    return response.data.users;
   },
 };

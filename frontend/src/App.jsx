@@ -10,6 +10,7 @@ import { PsychologistDashboard } from './pages/PsychologistDashboard';
 import { PsychologistProfile } from './pages/PsychologistProfile';
 import { TestConstructor } from './pages/TestConstructor';
 import { ClientForm } from './pages/ClientForm';
+import { ReportTemplateEditor } from './pages/ReportTemplateEditor';
 
 function App() {
   return (
@@ -56,6 +57,11 @@ function App() {
               <TestConstructor />
             </ProtectedRoute>
           } />
+          <Route path="/psychologist/reports/:testId" element={
+            <ProtectedRoute allowedRoles={['psychologist', 'admin']}>
+              <ReportTemplateEditor />
+              </ProtectedRoute>
+         } />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

@@ -3,14 +3,17 @@ import { useParams } from 'react-router-dom';
 import { formService } from '../services/formService';
 import api from '../services/api';
 
+const DEFAULT_FIELDS = [
+  { key: 'full_name', label: 'ФИО', required: true, enabled: true },
+  { key: 'email', label: 'Email', required: false, enabled: true },
+];
+
 export const ClientForm = () => {
   const { formId } = useParams();
   const [test, setTest] = useState(null);
   const [answers, setAnswers] = useState({});
+  const [clientData, setClientData] = useState({});
   const [submitted, setSubmitted] = useState(false);
-  const [results, setResults] = useState(null);
-  const [clientName, setClientName] = useState('');
-  const [clientEmail, setClientEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -29,6 +32,12 @@ export const ClientForm = () => {
     loadForm();
   }, [formId]);
 
+  const clientFields = test?.client_fields?.fields?.filter(f => f.enabled) || DEFAULT_FIELDS;
+
+  const handleClientDataChange = (key, value) => {
+    setClientData(prev => ({ ...prev, [key]: value }));
+  };
+
   const handleAnswerChange = (questionId, value) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }));
   };
@@ -46,18 +55,19 @@ export const ClientForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!clientName.trim()) {
-      alert('Пожалуйста, введите ваше имя');
-      return;
+
+    for (const field of clientFields) {
+      if (field.required && !clientData[field.key]?.trim()) {
+        alert(`Пожалуйста, заполните поле "${field.label}"`);
+        return;
+      }
     }
 
     setSubmitting(true);
     try {
-      // 1. Создаём сессию
       const sessionRes = await api.post(`/sessions/start/${formId}`);
       const sessionId = sessionRes.data.id;
 
-      // 2. Формируем массив ответов
       const answersArray = [];
       for (const question of test.questions) {
         const answer = answers[question.id];
@@ -76,14 +86,12 @@ export const ClientForm = () => {
         answersArray.push(answerObj);
       }
 
-      // 3. Отправляем ответы
-      const submitRes = await api.post(`/sessions/${sessionId}/submit`, {
-        client_name: clientName,
-        client_email: clientEmail || null,
+      await api.post(`/sessions/${sessionId}/submit`, {
+        client_name: clientData['full_name'] || 'Аноним',
+        client_email: clientData['email'] || null,
         answers: answersArray,
       });
 
-      setResults(submitRes.data.results);
       setSubmitted(true);
     } catch (err) {
       alert('Ошибка при отправке: ' + (err.response?.data?.detail || err.message));
@@ -102,7 +110,7 @@ export const ClientForm = () => {
   );
 
   if (error) return (
-    <div style={{ maxWidth: '500px', margin: '80px auto', textAlign: 'center' }}>
+    <div style={{ maxWidth: '500px', margin: '80px auto', textAlign: 'center', padding: '0 20px' }}>
       <div style={{ fontSize: '3rem', marginBottom: '16px' }}>😕</div>
       <h2 style={{ color: '#1e293b', marginBottom: '8px' }}>Тест не найден</h2>
       <p style={{ color: '#64748b' }}>{error}</p>
@@ -115,36 +123,27 @@ export const ClientForm = () => {
         background: 'white', borderRadius: '24px', padding: '40px',
         boxShadow: '0 4px 20px rgba(0,0,0,0.06)', textAlign: 'center',
       }}>
-        <div style={{ fontSize: '3rem', marginBottom: '16px' }}>🎉</div>
-        <h2 style={{ color: '#1e293b', marginBottom: '12px' }}>Спасибо за участие!</h2>
-        <p style={{ color: '#64748b', marginBottom: '24px' }}>
-          Ваши ответы успешно отправлены.
+        <div style={{ fontSize: '4rem', marginBottom: '16px' }}>✅</div>
+        <h2 style={{ color: '#1e293b', marginBottom: '12px', fontSize: '1.5rem', fontWeight: '800' }}>
+          Спасибо за участие!
+        </h2>
+        <p style={{ color: '#64748b', lineHeight: '1.6' }}>
+          Ваши ответы успешно получены.<br />
+          Психолог обработает результаты и свяжется с вами.
         </p>
-        {results && test.show_result_to_client !== false && (
-          <div style={{
-            background: '#f0f9ff', borderRadius: '16px', padding: '20px',
-            textAlign: 'left',
-          }}>
-            <h3 style={{ marginBottom: '12px', color: '#0369a1' }}>Ваши результаты:</h3>
-            {results.total_score !== undefined && (
-              <p><strong>Общий балл:</strong> {results.total_score}</p>
-            )}
-            {results.metrics && Object.keys(results.metrics).length > 0 && (
-              <div>
-                <p style={{ fontWeight: '600', marginTop: '12px' }}>Метрики:</p>
-                {Object.entries(results.metrics).map(([key, val]) => (
-                  <p key={key} style={{ marginLeft: '12px' }}>• {key}: {val}</p>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        <div style={{
+          marginTop: '24px', background: '#f0f9ff', borderRadius: '16px',
+          padding: '16px 20px', fontSize: '0.85rem', color: '#0369a1',
+          border: '1px solid #bae6fd',
+        }}>
+          📧 Результаты будут отправлены вам психологом
+        </div>
       </div>
     </div>
   );
 
   return (
-    <div style={{ maxWidth: '700px', margin: '40px auto', padding: '0 20px' }}>
+    <div style={{ maxWidth: '700px', margin: '40px auto', padding: '0 20px 60px' }}>
       <div style={{
         background: 'white', borderRadius: '24px', padding: '40px',
         boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
@@ -159,22 +158,55 @@ export const ClientForm = () => {
         )}
 
         <form onSubmit={handleSubmit}>
-          {/* Имя клиента */}
-          <div className="form-group">
-            <label>Ваше имя *</label>
-            <input
-              type="text" value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              required placeholder="Введите ваше имя"
-            />
-          </div>
-          <div className="form-group">
-            <label>Email (необязательно)</label>
-            <input
-              type="email" value={clientEmail}
-              onChange={(e) => setClientEmail(e.target.value)}
-              placeholder="email@example.com"
-            />
+
+          {/* Поля клиента */}
+          <div style={{
+            background: '#f8fafc', borderRadius: '16px', padding: '20px',
+            marginBottom: '24px', border: '1px solid #e2e8f0',
+          }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: '700', color: '#1e293b', marginBottom: '16px' }}>
+              👤 Ваши данные
+            </h3>
+            {clientFields.map(field => (
+              <div key={field.key} className="form-group">
+                <label>
+                  {field.label}
+                  {field.required && <span style={{ color: '#ef4444' }}> *</span>}
+                </label>
+                {field.key === 'birth_date' ? (
+                  <input
+                    type="date"
+                    value={clientData[field.key] || ''}
+                    onChange={(e) => handleClientDataChange(field.key, e.target.value)}
+                    required={field.required}
+                  />
+                ) : field.key === 'email' ? (
+                  <input
+                    type="email"
+                    value={clientData[field.key] || ''}
+                    onChange={(e) => handleClientDataChange(field.key, e.target.value)}
+                    required={field.required}
+                    placeholder="email@example.com"
+                  />
+                ) : field.key === 'phone' ? (
+                  <input
+                    type="tel"
+                    value={clientData[field.key] || ''}
+                    onChange={(e) => handleClientDataChange(field.key, e.target.value)}
+                    required={field.required}
+                    placeholder="+7 (999) 999-99-99"
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    value={clientData[field.key] || ''}
+                    onChange={(e) => handleClientDataChange(field.key, e.target.value)}
+                    required={field.required}
+                    placeholder={`Введите ${field.label.toLowerCase()}`}
+                  />
+                )}
+              </div>
+            ))}
           </div>
 
           <hr style={{ margin: '24px 0', border: 'none', borderTop: '1px solid #e2e8f0' }} />
@@ -182,16 +214,18 @@ export const ClientForm = () => {
           {/* Вопросы */}
           {test.questions.map((q, idx) => (
             <div key={q.id} style={{
-              marginBottom: '24px', padding: '20px',
+              marginBottom: '20px', padding: '20px',
               background: '#f8fafc', borderRadius: '16px',
               border: '1px solid #e2e8f0',
             }}>
-              <label style={{ fontWeight: '700', color: '#1e293b', marginBottom: '12px', display: 'block' }}>
+              <label style={{
+                fontWeight: '700', color: '#1e293b',
+                marginBottom: '12px', display: 'block',
+              }}>
                 {idx + 1}. {q.text}
                 {q.is_required && <span style={{ color: '#ef4444' }}> *</span>}
               </label>
 
-              {/* Один вариант */}
               {q.question_type === 'single_choice' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {q.options.map(opt => (
@@ -204,7 +238,6 @@ export const ClientForm = () => {
                     }}>
                       <input
                         type="radio" name={`q_${q.id}`}
-                        value={opt.id}
                         checked={answers[q.id] === opt.id}
                         onChange={() => handleAnswerChange(q.id, opt.id)}
                       />
@@ -214,7 +247,6 @@ export const ClientForm = () => {
                 </div>
               )}
 
-              {/* Несколько вариантов */}
               {q.question_type === 'multiple_choice' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {q.options.map(opt => (
@@ -236,25 +268,28 @@ export const ClientForm = () => {
                 </div>
               )}
 
-              {/* Текст */}
               {q.question_type === 'text' && (
                 <textarea
                   value={answers[q.id] || ''}
                   onChange={(e) => handleAnswerChange(q.id, e.target.value)}
-                  rows={3} placeholder="Введите ваш ответ..."
+                  rows={3}
+                  placeholder="Введите ваш ответ..."
                   style={{ resize: 'vertical' }}
+                  required={q.is_required}
                 />
               )}
 
-              {/* Шкала */}
               {q.question_type === 'scale' && (
                 <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                  <div style={{
+                    display: 'flex', justifyContent: 'space-between',
+                    marginBottom: '8px', alignItems: 'center',
+                  }}>
                     <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
                       {q.scale_config?.min ?? 1}
                     </span>
-                    <span style={{ fontSize: '1.2rem', fontWeight: '700', color: '#0369a1' }}>
-                      {answers[q.id] ?? '—'}
+                    <span style={{ fontSize: '1.5rem', fontWeight: '800', color: '#0369a1' }}>
+                      {answers[q.id] ?? q.scale_config?.min ?? 1}
                     </span>
                     <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
                       {q.scale_config?.max ?? 10}
@@ -277,7 +312,10 @@ export const ClientForm = () => {
             type="submit"
             disabled={submitting}
             className="btn btn-primary"
-            style={{ width: '100%', padding: '14px', fontSize: '1rem', opacity: submitting ? 0.6 : 1 }}
+            style={{
+              width: '100%', padding: '14px',
+              fontSize: '1rem', opacity: submitting ? 0.6 : 1,
+            }}
           >
             {submitting ? '⏳ Отправка...' : '📤 Отправить ответы'}
           </button>

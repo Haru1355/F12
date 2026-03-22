@@ -9,6 +9,20 @@ const QUESTION_TYPES = [
   { value: 'scale', label: '📊 Шкала' },
 ];
 
+const DEFAULT_CLIENT_FIELDS = [
+  { key: 'full_name', label: 'ФИО', required: true, enabled: true, removable: false },
+  { key: 'email', label: 'Email', required: false, enabled: true, removable: true },
+];
+
+const EXTRA_FIELDS = [
+  { key: 'phone', label: 'Телефон' },
+  { key: 'birth_date', label: 'Дата рождения' },
+  { key: 'age', label: 'Возраст' },
+  { key: 'city', label: 'Город' },
+  { key: 'education', label: 'Образование' },
+  { key: 'profession', label: 'Профессия' },
+];
+
 export const TestConstructor = () => {
   const { testId } = useParams();
   const navigate = useNavigate();
@@ -20,8 +34,9 @@ export const TestConstructor = () => {
     title: '',
     description: '',
     is_published: false,
-    show_result_to_client: true,
+    show_result_to_client: false,
   });
+  const [clientFields, setClientFields] = useState(DEFAULT_CLIENT_FIELDS);
 
   const isNew = !testId || testId === 'new';
 
@@ -38,6 +53,12 @@ export const TestConstructor = () => {
         is_published: t.is_published,
         show_result_to_client: t.show_result_to_client,
       });
+
+      // Загружаем поля клиента
+      if (t.client_fields?.fields) {
+        setClientFields(t.client_fields.fields);
+      }
+
       try {
         const qs = await formService.getQuestions(testId);
         setQuestions(
@@ -47,11 +68,10 @@ export const TestConstructor = () => {
           }))
         );
       } catch {
-        // Если вопросов нет — это нормально
         setQuestions([]);
       }
     } catch {
-      setMessage('Ошибка загрузки теста');
+      setMessage('❌ Ошибка загрузки теста');
     } finally {
       setLoading(false);
     }
@@ -64,6 +84,31 @@ export const TestConstructor = () => {
   const showMsg = (msg) => {
     setMessage(msg);
     setTimeout(() => setMessage(''), 4000);
+  };
+
+  /* ── Поля клиента ── */
+  const toggleField = (key) => {
+    setClientFields(prev =>
+      prev.map(f => f.key === key ? { ...f, enabled: !f.enabled } : f)
+    );
+  };
+
+  const toggleRequired = (key) => {
+    setClientFields(prev =>
+      prev.map(f => f.key === key ? { ...f, required: !f.required } : f)
+    );
+  };
+
+  const addExtraField = (field) => {
+    if (clientFields.find(f => f.key === field.key)) return;
+    setClientFields(prev => [
+      ...prev,
+      { ...field, required: false, enabled: true, removable: true },
+    ]);
+  };
+
+  const removeField = (key) => {
+    setClientFields(prev => prev.filter(f => f.key !== key));
   };
 
   /* ── Вопросы ── */
@@ -159,24 +204,21 @@ export const TestConstructor = () => {
     try {
       let currentTestId = testId;
 
+      const testData = {
+        title: testSettings.title,
+        description: testSettings.description,
+        is_published: isNew ? false : testSettings.is_published,
+        show_result_to_client: testSettings.show_result_to_client,
+        client_fields: { fields: clientFields },
+      };
+
       if (isNew) {
-        const created = await formService.createForm({
-          title: testSettings.title,
-          description: testSettings.description,
-          is_published: false, // НЕ публикуем при создании
-          show_result_to_client: testSettings.show_result_to_client,
-        });
+        const created = await formService.createForm(testData);
         currentTestId = created.id;
       } else {
-        await formService.updateForm(currentTestId, {
-          title: testSettings.title,
-          description: testSettings.description,
-          is_published: testSettings.is_published,
-          show_result_to_client: testSettings.show_result_to_client,
-        });
+        await formService.updateForm(currentTestId, testData);
       }
 
-      // Сохраняем вопросы если они есть
       if (questions.length > 0) {
         const payload = questions.map((q, i) => ({
           text: q.text,
@@ -201,7 +243,7 @@ export const TestConstructor = () => {
         navigate(`/psychologist/constructor/${currentTestId}`, { replace: true });
       }
     } catch (err) {
-      showMsg('❌ Ошибка сохранения: ' + (err.response?.data?.detail || err.message || ''));
+      showMsg('❌ Ошибка: ' + (err.response?.data?.detail || err.message || ''));
     } finally {
       setSaving(false);
     }
@@ -225,8 +267,8 @@ export const TestConstructor = () => {
         {/* Сообщение */}
         {message && (
           <div style={{
-            background: message.includes('✅') ? '#dcfce7' : '#fef3c7',
-            color: message.includes('✅') ? '#166534' : '#92400e',
+            background: message.includes('✅') ? '#dcfce7' : '#fee2e2',
+            color: message.includes('✅') ? '#166534' : '#991b1b',
             padding: '12px 16px', borderRadius: 12, marginBottom: 16,
             textAlign: 'center', fontWeight: '600',
           }}>
@@ -270,9 +312,9 @@ export const TestConstructor = () => {
           background: 'white', borderRadius: '24px', padding: '32px',
           boxShadow: '0 4px 20px rgba(0,0,0,0.06)', marginBottom: '24px',
         }}>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#1e293b', marginBottom: '24px' }}>
+          <h2 style={{ fontSize: '1.3rem', fontWeight: '800', color: '#1e293b', marginBottom: '24px' }}>
             {isNew ? '🆕 Новый тест' : `✏️ ${testSettings.title || 'Редактирование'}`}
-          </h1>
+          </h2>
 
           <div className="form-group">
             <label>Название теста *</label>
@@ -290,7 +332,7 @@ export const TestConstructor = () => {
               value={testSettings.description}
               onChange={(e) => setTestSettings({ ...testSettings, description: e.target.value })}
               rows={3}
-              placeholder="Краткое описание теста для клиента"
+              placeholder="Краткое описание теста"
               style={{ resize: 'vertical' }}
             />
           </div>
@@ -306,14 +348,138 @@ export const TestConstructor = () => {
                 Опубликован (доступен по ссылке)
               </label>
             )}
-            <label style={{ display: 'flex', gap: '8px', alignItems: 'center', cursor: 'pointer', fontSize: '0.9rem' }}>
-              <input
-                type="checkbox"
-                checked={testSettings.show_result_to_client}
-                onChange={(e) => setTestSettings({ ...testSettings, show_result_to_client: e.target.checked })}
-              />
-              Показывать результат клиенту
-            </label>
+          </div>
+        </div>
+
+        {/* Кнопка шаблонов отчётов (только для существующих тестов) */}
+        {!isNew && (
+          <div style={{
+                        background: 'white', borderRadius: '24px', padding: '24px',
+                        boxShadow: '0 4px 20px rgba(0,0,0,0.06)', marginBottom: '24px',
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                         }}>
+                          <div>
+                            <h3 style={{ fontWeight: '700', color: '#1e293b', margin: 0 }}>📄 Шаблоны отчётов</h3>
+                             <p style={{ color: '#64748b', fontSize: '0.85rem', marginTop: '4px' }}>
+                              Настройте какие блоки показывать в отчётах для клиента и психолога
+                              </p>
+                              </div>
+                               <button
+                               onClick={() => navigate(`/psychologist/reports/${testId}`)}
+                               className="btn btn-outline"
+                               >
+                                ✏️ Настроить
+                                </button>
+                                </div>
+                              )}
+                              
+        {/* Поля клиента */}
+        <div style={{
+          background: 'white', borderRadius: '24px', padding: '32px',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.06)', marginBottom: '24px',
+        }}>
+          <h2 style={{ fontSize: '1.1rem', fontWeight: '800', color: '#1e293b', marginBottom: '8px' }}>
+            👤 Данные клиента
+          </h2>
+          <p style={{ color: '#64748b', fontSize: '0.85rem', marginBottom: '20px' }}>
+            Выберите какие данные клиент заполнит перед прохождением теста.
+            ФИО всегда обязательно.
+          </p>
+
+          {/* Текущие поля */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' }}>
+            {clientFields.map(field => (
+              <div key={field.key} style={{
+                display: 'flex', alignItems: 'center', gap: '12px',
+                padding: '12px 16px', borderRadius: '12px',
+                background: field.enabled ? '#f0f9ff' : '#f8fafc',
+                border: `1px solid ${field.enabled ? '#bae6fd' : '#e2e8f0'}`,
+                flexWrap: 'wrap',
+              }}>
+                {/* Включить/выключить */}
+                <input
+                  type="checkbox"
+                  checked={field.enabled}
+                  onChange={() => field.removable && toggleField(field.key)}
+                  disabled={!field.removable}
+                  style={{ width: '16px', height: '16px', cursor: field.removable ? 'pointer' : 'default' }}
+                />
+
+                {/* Название поля */}
+                <span style={{
+                  fontWeight: '600', color: field.enabled ? '#1e293b' : '#94a3b8',
+                  flex: 1, minWidth: '100px',
+                }}>
+                  {field.label}
+                  {!field.removable && (
+                    <span style={{
+                      marginLeft: '8px', fontSize: '0.7rem',
+                      background: '#e0f2fe', color: '#0369a1',
+                      padding: '2px 8px', borderRadius: '50px',
+                    }}>
+                      обязательно
+                    </span>
+                  )}
+                </span>
+
+                {/* Обязательное */}
+                {field.enabled && field.removable && (
+                  <label style={{ display: 'flex', gap: '6px', alignItems: 'center', cursor: 'pointer', fontSize: '0.85rem', color: '#64748b' }}>
+                    <input
+                      type="checkbox"
+                      checked={field.required}
+                      onChange={() => toggleRequired(field.key)}
+                    />
+                    Обязательное
+                  </label>
+                )}
+
+                {/* Удалить */}
+                {field.removable && (
+                  <button
+                    onClick={() => removeField(field.key)}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: '#94a3b8', fontSize: '1rem', padding: '0 4px',
+                    }}
+                    title="Удалить поле"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* Добавить дополнительное поле */}
+          <div>
+            <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '10px', fontWeight: '600' }}>
+              + Добавить поле:
+            </p>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+              {EXTRA_FIELDS
+                .filter(f => !clientFields.find(cf => cf.key === f.key))
+                .map(field => (
+                  <button
+                    key={field.key}
+                    onClick={() => addExtraField(field)}
+                    style={{
+                      background: '#f0f9ff', border: '1px dashed #0369a1',
+                      borderRadius: '50px', padding: '6px 14px',
+                      cursor: 'pointer', fontSize: '0.8rem',
+                      color: '#0369a1', fontFamily: 'Inter, sans-serif',
+                      fontWeight: '600',
+                    }}
+                  >
+                    + {field.label}
+                  </button>
+                ))}
+              {EXTRA_FIELDS.every(f => clientFields.find(cf => cf.key === f.key)) && (
+                <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>
+                  Все поля добавлены
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
@@ -327,7 +493,7 @@ export const TestConstructor = () => {
             marginBottom: '20px',
           }}>
             <h2 style={{ fontWeight: '700', color: '#1e293b', margin: 0 }}>
-              Вопросы ({questions.length})
+              ❓ Вопросы ({questions.length})
             </h2>
             <button onClick={addQuestion} className="btn btn-primary">
               + Добавить вопрос
@@ -378,7 +544,9 @@ export const TestConstructor = () => {
               {/* Тип и обязательность */}
               <div style={{ display: 'flex', gap: '16px', marginBottom: '16px', flexWrap: 'wrap', alignItems: 'center' }}>
                 <div style={{ flex: 1, minWidth: '200px' }}>
-                  <label>Тип вопроса</label>
+                  <label style={{ display: 'block', fontWeight: '600', marginBottom: '4px', fontSize: '0.85rem' }}>
+                    Тип вопроса
+                  </label>
                   <select
                     value={q.question_type}
                     onChange={(e) => updateQuestion(qIdx, 'question_type', e.target.value)}
@@ -388,7 +556,10 @@ export const TestConstructor = () => {
                     ))}
                   </select>
                 </div>
-                <label style={{ display: 'flex', gap: '8px', alignItems: 'center', cursor: 'pointer', marginTop: '24px' }}>
+                <label style={{
+                  display: 'flex', gap: '8px', alignItems: 'center',
+                  cursor: 'pointer', marginTop: '20px', fontSize: '0.9rem',
+                }}>
                   <input
                     type="checkbox"
                     checked={q.is_required}
@@ -406,7 +577,8 @@ export const TestConstructor = () => {
                   </label>
                   {(q.options || []).map((opt, oIdx) => (
                     <div key={oIdx} style={{
-                      display: 'flex', gap: '8px', marginBottom: '8px', alignItems: 'center', flexWrap: 'wrap',
+                      display: 'flex', gap: '8px', marginBottom: '8px',
+                      alignItems: 'center', flexWrap: 'wrap',
                     }}>
                       <input
                         type="text" value={opt.text}
@@ -417,13 +589,13 @@ export const TestConstructor = () => {
                       <input
                         type="number" value={opt.score}
                         onChange={(e) => updateOption(qIdx, oIdx, 'score', e.target.value)}
-                        placeholder="Балл" title="Баллы за этот вариант"
+                        placeholder="Балл"
                         style={{ flex: 1, minWidth: '70px' }}
                       />
                       <input
                         type="text" value={opt.metric_key || ''}
                         onChange={(e) => updateOption(qIdx, oIdx, 'metric_key', e.target.value)}
-                        placeholder="Метрика" title="Ключ метрики (необязательно)"
+                        placeholder="Метрика"
                         style={{ flex: 1.5, minWidth: '100px' }}
                       />
                       <button onClick={() => removeOption(qIdx, oIdx)}
@@ -474,17 +646,17 @@ export const TestConstructor = () => {
                 </div>
               )}
 
-              {/* Текст — ничего дополнительного */}
+              {/* Текст */}
               {q.question_type === 'text' && (
                 <p style={{ color: '#94a3b8', fontSize: '0.85rem', fontStyle: 'italic' }}>
-                  Клиент введёт свободный текст. Баллы не начисляются.
+                  Клиент введёт свободный текст.
                 </p>
               )}
             </div>
           ))}
         </div>
 
-        {/* Нижняя панель сохранения */}
+        {/* Нижняя панель */}
         <div style={{
           display: 'flex', gap: '12px', justifyContent: 'center',
           marginBottom: '60px',

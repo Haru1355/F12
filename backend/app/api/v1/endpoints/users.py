@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
@@ -23,7 +23,6 @@ from app.schemas.user import (
 )
 from app.models.user import User
 
-
 router = APIRouter()
 
 
@@ -42,10 +41,10 @@ async def get_users(
     )
 
 
-# ← ВАЖНО: этот роут ВЫШЕ /{user_id}
+# ← ВАЖНО: этот роут ОБЯЗАТЕЛЬНО выше /{user_id}
 @router.get("/expiring-access", response_model=UserListResponse)
 async def get_expiring_access_users(
-    days: int = Query(7, ge=1, le=90, description="Порог в днях"),
+    days: int = Query(7, ge=1, le=90),
     session: AsyncSession = Depends(get_session),
     current_admin: User = Depends(get_current_admin),
 ):
@@ -101,6 +100,7 @@ async def delete_user_endpoint(
 async def extend_access(
     user_id: int,
     data: ExtendAccessRequest,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
     current_admin: User = Depends(get_current_admin),
 ):
@@ -108,11 +108,46 @@ async def extend_access(
     user = await get_user_by_id(session, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
-
     if user.role == "admin":
         raise HTTPException(status_code=400, detail="Нельзя изменить доступ администратору")
 
     old_date, new_date = await extend_user_access(session, user, data.days)
+
+    # Отправляем email уведомление в фоне
+    from app.services.email_service import send_email
+    from app.core.config import settings
+
+    expire_date = new_date.strftime('%d.%m.%Y')
+
+    background_tasks.add_task(
+        send_email,
+        to=user.email,
+        subject=f"✅ Доступ к ПрофДНК продлён до {expire_date}",
+        body=f"""
+        <html>
+        <body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <div style="background: linear-gradient(135deg, #0369a1, #0d9488); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+                <h1 style="color: white; margin: 0;">ПрофДНК</h1>
+            </div>
+            <div style="background: white; padding: 30px; border: 1px solid #e2e8f0; border-radius: 0 0 12px 12px;">
+                <h2 style="color: #1e293b;">Здравствуйте, {user.full_name}!</h2>
+                <p style="color: #64748b; line-height: 1.6;">
+                    Ваш доступ к платформе <strong>ПрофДНК</strong> успешно продлён.
+                </p>
+                <div style="background: #f0fdf4; border-left: 4px solid #22c55e; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                    <p style="margin: 0; color: #166534;">
+                        ✅ Доступ активен до: <strong>{expire_date}</strong><br>
+                        📅 Продлён на: <strong>{data.days} дней</strong>
+                    </p>
+                </div>
+                <p style="color: #94a3b8; font-size: 0.85rem;">
+                    Это письмо отправлено автоматически платформой ПрофДНК.
+                </p>
+            </div>
+        </body>
+        </html>
+        """,
+    )
 
     return ExtendAccessResponse(
         user_id=user.id,
@@ -134,7 +169,6 @@ async def set_unlimited_access_endpoint(
     user = await get_user_by_id(session, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
-
     await set_unlimited_access(session, user)
     return UserResponse.model_validate(user)
 
@@ -149,12 +183,9 @@ async def revoke_access_endpoint(
     user = await get_user_by_id(session, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Пользователь не найден")
-
     if user.role == "admin":
         raise HTTPException(status_code=400, detail="Нельзя отозвать доступ администратору")
-
     if user.id == current_admin.id:
         raise HTTPException(status_code=400, detail="Нельзя отозвать доступ самому себе")
-
     await revoke_access(session, user)
     return UserResponse.model_validate(user)

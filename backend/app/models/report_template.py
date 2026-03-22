@@ -21,6 +21,11 @@ class ReportTemplate(Base, TimestampMixin):
     report_type: Mapped[str] = mapped_column(
         String(50), nullable=False, default="client"
     )
+    # Блоки отчёта — JSON массив
+    blocks: Mapped[Optional[dict]] = mapped_column(
+        JSON, nullable=True,
+        comment="Блоки отчёта в формате [{type, enabled, title, config}]"
+    )
     html_template: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     interpretations: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
 

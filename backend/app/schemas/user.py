@@ -1,6 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from typing import Optional, Any
-from datetime import datetime
+from typing import Optional
+from datetime import datetime, timezone
 
 
 class LoginRequest(BaseModel):
@@ -24,8 +24,14 @@ class UserCreate(BaseModel):
     @field_validator('access_until')
     @classmethod
     def validate_access_until(cls, v):
-        if v is not None and v < datetime.utcnow():
-            raise ValueError('Дата окончания доступа должна быть в будущем')
+        if v is not None:
+            # Приводим обе даты к одному типу
+            if v.tzinfo is not None:
+                now = datetime.now(timezone.utc)
+            else:
+                now = datetime.utcnow()
+            if v < now:
+                raise ValueError('Дата окончания доступа должна быть в будущем')
         return v
 
 
@@ -53,7 +59,6 @@ class UserResponse(BaseModel):
     role: str
     is_active: bool
     access_until: Optional[datetime] = None
-    # ← убрали has_active_access отсюда
     phone: Optional[str] = None
     telegram: Optional[str] = None
     education_level: Optional[str] = None
@@ -65,14 +70,16 @@ class UserResponse(BaseModel):
 
     @property
     def has_active_access(self) -> bool:
-        """Вычисляется на фронте по полям is_active и access_until."""
         if not self.is_active:
             return False
         if self.role == "admin":
             return True
         if self.access_until is None:
             return True
-        return self.access_until > datetime.utcnow()
+        now = datetime.now(timezone.utc)
+        if self.access_until.tzinfo is None:
+            return self.access_until > datetime.utcnow()
+        return self.access_until > now
 
 
 class UserListResponse(BaseModel):

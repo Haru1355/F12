@@ -1,10 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timezone, timedelta
 
 from app.core.database import get_session
 from app.core.security import create_access_token
 from app.core.dependencies import get_current_user, get_current_admin
 from app.services.user_service import authenticate_user, create_user, get_user_by_email
+from app.services.email_service import send_access_expiring_notification
 from app.schemas.user import (
     LoginRequest,
     TokenResponse,
@@ -13,6 +15,7 @@ from app.schemas.user import (
     ProfileUpdate,
 )
 from app.models.user import User
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -20,6 +23,7 @@ router = APIRouter()
 @router.post("/login", response_model=TokenResponse)
 async def login(
     form_data: LoginRequest,
+    background_tasks: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
 ):
     user = await authenticate_user(session, form_data.email, form_data.password)
@@ -28,7 +32,29 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Неверный email или пароль",
         )
+
     token = create_access_token(data={"sub": str(user.id), "role": user.role})
+
+    # Проверяем истечение подписки в фоне
+    if user.role == "psychologist" and user.access_until:
+        now = datetime.now(timezone.utc)
+        access_until = user.access_until
+        if access_until.tzinfo is None:
+            access_until = access_until.replace(tzinfo=timezone.utc)
+
+        days_left = (access_until - now).days
+
+        # Уведомляем если осталось 7 дней или меньше (но доступ ещё есть)
+        if 0 < days_left <= 7:
+            background_tasks.add_task(
+                send_access_expiring_notification,
+                psychologist_email=user.email,
+                psychologist_name=user.full_name,
+                admin_email=settings.ADMIN_EMAIL,
+                access_until=access_until,
+                days_left=days_left,
+            )
+
     return TokenResponse(
         access_token=token,
         user=UserResponse.model_validate(user),
@@ -67,7 +93,6 @@ async def update_me(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ):
-    """Редактирование собственного профиля."""
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(current_user, field, value)

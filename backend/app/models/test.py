@@ -26,8 +26,22 @@ class Test(Base, TimestampMixin):
     unique_link: Mapped[Optional[str]] = mapped_column(
         String(100), unique=True, nullable=True, index=True
     )
-    show_result_to_client: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    show_result_to_client: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     scoring_config: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Поля которые психолог хочет собрать с клиента
+    # По умолчанию: ФИО (всегда) + email
+    client_fields: Mapped[Optional[dict]] = mapped_column(
+        JSON,
+        nullable=True,
+        default=lambda: {
+            "fields": [
+                {"key": "full_name", "label": "ФИО", "required": True, "enabled": True, "removable": False},
+                {"key": "email", "label": "Email", "required": False, "enabled": True, "removable": True},
+            ]
+        },
+        comment="Поля для сбора данных клиента"
+    )
 
     owner: Mapped[User] = relationship("User", back_populates="tests")
     questions: Mapped[List[Question]] = relationship(
