@@ -4,6 +4,37 @@ import { authService } from '../services/authService';
 import { formService } from '../services/formService';
 import { psychologistService } from '../services/psychologistService';
 
+const StatCard = ({ emoji, label, value, color }) => (
+  <div style={{
+    background: 'white', borderRadius: '20px', padding: '24px',
+    boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+    border: '1px solid rgba(0,0,0,0.04)',
+    display: 'flex', alignItems: 'center', gap: '16px',
+  }}>
+    <div style={{
+      width: '52px', height: '52px', borderRadius: '14px',
+      background: color, display: 'flex', alignItems: 'center',
+      justifyContent: 'center', fontSize: '1.5rem', flexShrink: 0,
+    }}>
+      {emoji}
+    </div>
+    <div>
+      <div style={{ fontSize: '1.8rem', fontWeight: '800', color: '#1e293b' }}>{value}</div>
+      <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '2px' }}>{label}</div>
+    </div>
+  </div>
+);
+
+const Badge = ({ active }) => (
+  <span style={{
+    background: active ? '#dcfce7' : '#fee2e2',
+    color: active ? '#166534' : '#991b1b',
+    padding: '3px 10px', borderRadius: '50px', fontSize: '0.75rem', fontWeight: '600',
+  }}>
+    {active ? '✓ Активен' : '✕ Заблокирован'}
+  </span>
+);
+
 export const AdminDashboard = () => {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
@@ -13,9 +44,8 @@ export const AdminDashboard = () => {
   const [editingPsych, setEditingPsych] = useState(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newPsych, setNewPsych] = useState({ email: '', password: '', full_name: '' });
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState({ text: '', type: '' });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
 
   const loadData = async () => {
     try {
@@ -29,315 +59,512 @@ export const AdminDashboard = () => {
       setTests(allTests);
       setSessions(allSessions);
     } catch (err) {
-      setError(err.message);
+      showMsg(err.message, 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
-  const showMessage = (msg) => {
-    setMessage(msg);
-    setTimeout(() => setMessage(''), 3000);
+  const showMsg = (text, type = 'success') => {
+    setMessage({ text, type });
+    setTimeout(() => setMessage({ text: '', type: '' }), 3000);
   };
 
-  const handleCreatePsychologist = async (e) => {
+  const handleCreate = async (e) => {
     e.preventDefault();
     try {
       await authService.createPsychologist(newPsych.email, newPsych.password, newPsych.full_name);
-      showMessage('Психолог создан');
+      showMsg('✅ Психолог создан');
       setNewPsych({ email: '', password: '', full_name: '' });
       setShowCreateForm(false);
       await loadData();
-    } catch (err) {
-      showMessage(err.message);
-    }
+    } catch (err) { showMsg(err.message, 'error'); }
   };
 
-  const handleUpdatePsychologist = async (id, updates) => {
+  const handleUpdate = async (id, updates) => {
     try {
       await authService.updatePsychologist(id, updates);
-      showMessage('Данные обновлены');
+      showMsg('✅ Данные обновлены');
       setEditingPsych(null);
       await loadData();
-    } catch {
-      showMessage('Ошибка обновления');
-    }
+    } catch { showMsg('Ошибка обновления', 'error'); }
   };
 
-  const handleDeletePsychologist = async (id) => {
-    if (window.confirm('Удалить психолога? Это удалит все его тесты и данные.')) {
+  const handleDelete = async (id) => {
+    if (window.confirm('Удалить психолога?')) {
       try {
         await authService.deletePsychologist(id);
-        showMessage('Психолог удалён');
+        showMsg('✅ Психолог удалён');
         await loadData();
-      } catch {
-        showMessage('Ошибка удаления');
-      }
+      } catch { showMsg('Ошибка удаления', 'error'); }
     }
   };
 
-  const handleBlockPsychologist = async (id, isActive) => {
+  const handleBlock = async (id, isActive) => {
     try {
-      if (isActive) {
-        await authService.blockPsychologist(id);
-        showMessage('Психолог заблокирован');
-      } else {
-        await authService.unblockPsychologist(id);
-        showMessage('Психолог разблокирован');
-      }
+      if (isActive) await authService.blockPsychologist(id);
+      else await authService.unblockPsychologist(id);
+      showMsg(isActive ? '🔒 Заблокирован' : '🔓 Разблокирован');
       await loadData();
-    } catch {
-      showMessage('Ошибка');
-    }
+    } catch { showMsg('Ошибка', 'error'); }
   };
 
-  const handleExtendAccess = async (id) => {
+  const handleExtend = async (id) => {
     const days = prompt('На сколько дней продлить доступ?', '30');
     if (days) {
       try {
         await authService.extendAccess(id, parseInt(days));
-        showMessage(`Доступ продлён на ${days} дней`);
+        showMsg(`✅ Доступ продлён на ${days} дней`);
         await loadData();
-      } catch {
-        showMessage('Ошибка продления');
-      }
+      } catch { showMsg('Ошибка продления', 'error'); }
     }
   };
 
   const handleReport = async (sessionId) => {
     try {
       await psychologistService.downloadReportDocx(sessionId, 'psychologist');
-    } catch {
-      showMessage('Ошибка генерации отчёта');
-    }
+    } catch { showMsg('Ошибка генерации отчёта', 'error'); }
   };
 
-  const getPsychologistName = (ownerId) => {
-    const psych = psychologists.find(p => p.id === ownerId);
-    return psych ? psych.full_name : 'Неизвестно';
+  const getPsychName = (ownerId) => {
+    const p = psychologists.find(p => p.id === ownerId);
+    return p ? p.full_name : 'Неизвестно';
   };
 
-  const getTestLink = (uniqueLink) => {
-    return `${window.location.origin}/form/${uniqueLink}`;
-  };
+  const tabs = [
+    { id: 'profile', label: '👤 Профиль' },
+    { id: 'psychologists', label: `👥 Психологи (${psychologists.length})` },
+    { id: 'tests', label: `📋 Тесты (${tests.length})` },
+    { id: 'sessions', label: `📊 Сессии (${sessions.length})` },
+  ];
 
-  const getTestTitle = (testId) => {
-    const test = tests.find(t => t.id === testId);
-    return test ? test.title : 'Неизвестно';
-  };
-
-  if (loading) return <div className="container">Загрузка...</div>;
-  if (error) return <div className="container alert alert-error">{error}</div>;
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: '3rem', marginBottom: '16px' }}>⏳</div>
+        <p style={{ color: '#64748b' }}>Загрузка данных...</p>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="container" style={{ marginTop: '2rem' }}>
-      <h1>Панель администратора</h1>
-      {message && <div className="alert alert-success">{message}</div>}
+    <div style={{ background: '#f0f9ff', minHeight: '100vh', padding: '32px 0' }}>
+      <div className="container">
 
-      <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid #ccc', marginBottom: '1rem' }}>
-        <button onClick={() => setActiveTab('profile')} className={activeTab === 'profile' ? 'btn btn-primary' : 'btn'}>Мой профиль</button>
-        <button onClick={() => setActiveTab('psychologists')} className={activeTab === 'psychologists' ? 'btn btn-primary' : 'btn'}>Психологи</button>
-        <button onClick={() => setActiveTab('tests')} className={activeTab === 'tests' ? 'btn btn-primary' : 'btn'}>Тесты</button>
-        <button onClick={() => setActiveTab('sessions')} className={activeTab === 'sessions' ? 'btn btn-primary' : 'btn'}>Сессии</button>
-      </div>
-
-      {/* ПРОФИЛЬ */}
-      {activeTab === 'profile' && user && (
-        <div className="card">
-          <h2>Профиль</h2>
-          <p><strong>Имя:</strong> {user.full_name}</p>
-          <p><strong>Email:</strong> {user.email}</p>
-          <p><strong>Роль:</strong> Администратор</p>
-          <p><strong>Дата регистрации:</strong> {new Date(user.created_at).toLocaleDateString()}</p>
+        {/* Заголовок */}
+        <div style={{ marginBottom: '32px' }}>
+          <h1 style={{ fontSize: '1.8rem', fontWeight: '800', color: '#1e293b' }}>
+            Панель администратора
+          </h1>
+          <p style={{ color: '#64748b', marginTop: '4px' }}>
+            Управление платформой ПрофДНК
+          </p>
         </div>
-      )}
 
-      {/* ПСИХОЛОГИ */}
-      {activeTab === 'psychologists' && (
-        <div>
-          <button onClick={() => setShowCreateForm(!showCreateForm)} className="btn btn-primary" style={{ marginBottom: '1rem' }}>
-            + Создать психолога
-          </button>
-          {showCreateForm && (
-            <div className="card">
-              <h3>Создать психолога</h3>
-              <form onSubmit={handleCreatePsychologist}>
-                <div className="form-group">
-                  <label>Email *</label>
-                  <input type="email" value={newPsych.email} onChange={e => setNewPsych({ ...newPsych, email: e.target.value })} required />
-                </div>
-                <div className="form-group">
-                  <label>Пароль *</label>
-                  <input type="password" value={newPsych.password} onChange={e => setNewPsych({ ...newPsych, password: e.target.value })} required />
-                </div>
-                <div className="form-group">
-                  <label>ФИО *</label>
-                  <input type="text" value={newPsych.full_name} onChange={e => setNewPsych({ ...newPsych, full_name: e.target.value })} required />
-                </div>
-                <button type="submit" className="btn btn-primary">Создать</button>
-                <button type="button" onClick={() => setShowCreateForm(false)} className="btn btn-outline" style={{ marginLeft: '0.5rem' }}>Отмена</button>
-              </form>
+        {/* Сообщение */}
+        {message.text && (
+          <div className={`alert alert-${message.type === 'error' ? 'error' : 'success'}`}>
+            {message.text}
+          </div>
+        )}
+
+        {/* Статистика */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+          gap: '16px', marginBottom: '32px',
+        }}>
+          <StatCard emoji="👥" label="Психологов" value={psychologists.length} color="#e0f2fe" />
+          <StatCard emoji="📋" label="Тестов" value={tests.length} color="#f0fdf4" />
+          <StatCard emoji="✅" label="Прохождений" value={sessions.filter(s => s.status === 'completed').length} color="#fef9c3" />
+          <StatCard emoji="⏳" label="В процессе" value={sessions.filter(s => s.status === 'in_progress').length} color="#fdf2f8" />
+        </div>
+
+        {/* Табы */}
+        <div style={{
+          display: 'flex', gap: '8px', marginBottom: '24px',
+          background: 'white', borderRadius: '16px', padding: '8px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.06)', flexWrap: 'wrap',
+        }}>
+          {tabs.map(tab => (
+            <button key={tab.id} onClick={() => setActiveTab(tab.id)} style={{
+              padding: '10px 20px', borderRadius: '10px', border: 'none',
+              cursor: 'pointer', fontWeight: '600', fontSize: '0.875rem',
+              transition: 'all 0.2s', fontFamily: 'Inter, sans-serif',
+              background: activeTab === tab.id
+                ? 'linear-gradient(135deg, #0369a1, #0d9488)'
+                : 'transparent',
+              color: activeTab === tab.id ? 'white' : '#64748b',
+              boxShadow: activeTab === tab.id ? '0 4px 12px rgba(3,105,161,0.3)' : 'none',
+            }}>
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ПРОФИЛЬ */}
+        {activeTab === 'profile' && user && (
+          <div style={{
+            background: 'white', borderRadius: '24px',
+            padding: '40px', boxShadow: '0 4px 20px rgba(0,0,0,0.06)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '32px' }}>
+              <div style={{
+                width: '80px', height: '80px', borderRadius: '24px',
+                background: 'linear-gradient(135deg, #0369a1, #0d9488)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '2rem', fontWeight: '800', color: 'white', flexShrink: 0,
+              }}>
+                {user.full_name?.charAt(0) || 'A'}
+              </div>
+              <div>
+                <h2 style={{ fontSize: '1.5rem', fontWeight: '800', color: '#1e293b' }}>
+                  {user.full_name}
+                </h2>
+                <p style={{ color: '#64748b', marginTop: '4px' }}>{user.email}</p>
+                <span style={{
+                  background: '#e0f2fe', color: '#0369a1',
+                  padding: '4px 12px', borderRadius: '50px',
+                  fontSize: '0.75rem', fontWeight: '700',
+                  display: 'inline-block', marginTop: '8px',
+                }}>
+                  👑 Администратор
+                </span>
+              </div>
             </div>
-          )}
 
-          <div className="card">
-            <h3>Список психологов ({psychologists.length})</h3>
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: '16px',
+            }}>
+              {[
+                { label: 'Email', value: user.email, emoji: '📧' },
+                { label: 'Роль', value: 'Администратор', emoji: '👑' },
+                { label: 'Статус', value: 'Активен', emoji: '✅' },
+                { label: 'Дата регистрации', value: new Date(user.created_at).toLocaleDateString('ru-RU'), emoji: '📅' },
+              ].map(item => (
+                <div key={item.label} style={{
+                  background: '#f8fafc', borderRadius: '14px', padding: '16px',
+                }}>
+                  <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: '600', marginBottom: '4px' }}>
+                    {item.emoji} {item.label}
+                  </div>
+                  <div style={{ fontWeight: '600', color: '#1e293b' }}>{item.value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ПСИХОЛОГИ */}
+        {activeTab === 'psychologists' && (
+          <div>
+            {/* Кнопка создать */}
+            <div style={{ marginBottom: '20px' }}>
+              <button onClick={() => setShowCreateForm(!showCreateForm)} style={{
+                background: 'linear-gradient(135deg, #0369a1, #0d9488)',
+                color: 'white', border: 'none', borderRadius: '50px',
+                padding: '12px 28px', fontWeight: '700', fontSize: '0.9rem',
+                cursor: 'pointer', boxShadow: '0 4px 15px rgba(3,105,161,0.3)',
+                fontFamily: 'Inter, sans-serif',
+              }}>
+                + Добавить психолога
+              </button>
+            </div>
+
+            {/* Форма создания */}
+            {showCreateForm && (
+              <div style={{
+                background: 'white', borderRadius: '24px', padding: '32px',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.08)', marginBottom: '24px',
+                border: '2px solid #e0f2fe',
+              }}>
+                <h3 style={{ marginBottom: '20px', fontSize: '1.1rem', fontWeight: '700' }}>
+                  👤 Новый психолог
+                </h3>
+                <form onSubmit={handleCreate}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+                    <div className="form-group">
+                      <label>Email *</label>
+                      <input type="email" value={newPsych.email}
+                        onChange={e => setNewPsych({ ...newPsych, email: e.target.value })} required />
+                    </div>
+                    <div className="form-group">
+                      <label>Пароль *</label>
+                      <input type="password" value={newPsych.password}
+                        onChange={e => setNewPsych({ ...newPsych, password: e.target.value })} required />
+                    </div>
+                    <div className="form-group">
+                      <label>ФИО *</label>
+                      <input type="text" value={newPsych.full_name}
+                        onChange={e => setNewPsych({ ...newPsych, full_name: e.target.value })} required />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                    <button type="submit" className="btn btn-primary">Создать</button>
+                    <button type="button" onClick={() => setShowCreateForm(false)} className="btn btn-outline">Отмена</button>
+                  </div>
+                </form>
+              </div>
+            )}
+
+            {/* Список психологов */}
+            <div style={{
+              background: 'white', borderRadius: '24px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.06)', overflow: 'hidden',
+            }}>
+              <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9' }}>
+                <h3 style={{ fontWeight: '700', color: '#1e293b' }}>
+                  Список психологов
+                </h3>
+              </div>
+              <div style={{ overflowX: 'auto' }}>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Психолог</th>
+                      <th>Статус</th>
+                      <th>Доступ до</th>
+                      <th>Регистрация</th>
+                      <th>Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {psychologists.map(p => (
+                      <tr key={p.id}>
+                        <td>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{
+                              width: '36px', height: '36px', borderRadius: '10px',
+                              background: 'linear-gradient(135deg, #e0f2fe, #f0fdf4)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontWeight: '700', color: '#0369a1', fontSize: '0.9rem', flexShrink: 0,
+                            }}>
+                              {p.full_name?.charAt(0)}
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: '600', color: '#1e293b' }}>{p.full_name}</div>
+                              <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{p.email}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td><Badge active={p.is_active} /></td>
+                        <td>
+                          {p.access_until ? (
+                            <span style={{ fontSize: '0.85rem', color: '#1e293b', fontWeight: '500' }}>
+                              📅 {new Date(p.access_until).toLocaleDateString('ru-RU')}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#94a3b8', fontSize: '0.85rem' }}>Не задано</span>
+                          )}
+                        </td>
+                        <td style={{ color: '#64748b', fontSize: '0.85rem' }}>
+                          {new Date(p.created_at).toLocaleDateString('ru-RU')}
+                        </td>
+                        <td>
+                          {editingPsych === p.id ? (
+                            <EditPsychForm
+                              psych={p}
+                              onSave={(updates) => handleUpdate(p.id, updates)}
+                              onCancel={() => setEditingPsych(null)}
+                            />
+                          ) : (
+                            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                              <button onClick={() => setEditingPsych(p.id)}
+                                className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
+                                ✏️ Ред.
+                              </button>
+                              <button onClick={() => handleBlock(p.id, p.is_active)}
+                                className={`btn ${p.is_active ? 'btn-danger' : 'btn-success'}`}
+                                style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
+                                {p.is_active ? '🔒' : '🔓'}
+                              </button>
+                              <button onClick={() => handleExtend(p.id)}
+                                className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
+                                📅
+                              </button>
+                              <button onClick={() => handleDelete(p.id)}
+                                className="btn btn-danger" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>
+                                🗑️
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {psychologists.length === 0 && (
+                      <tr>
+                        <td colSpan="5" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                          <div style={{ fontSize: '2rem', marginBottom: '8px' }}>👥</div>
+                          Психологов пока нет
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ТЕСТЫ */}
+        {activeTab === 'tests' && (
+          <div style={{
+            background: 'white', borderRadius: '24px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.06)', overflow: 'hidden',
+          }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9' }}>
+              <h3 style={{ fontWeight: '700', color: '#1e293b' }}>Все тесты платформы</h3>
+            </div>
             <div style={{ overflowX: 'auto' }}>
               <table className="table">
                 <thead>
                   <tr>
-                    <th>ФИО</th>
-                    <th>Email</th>
+                    <th>Название</th>
+                    <th>Автор</th>
                     <th>Статус</th>
-                    <th>Доступ до</th>
-                    <th>Дата регистрации</th>
-                    <th>Действия</th>
+                    <th>Вопросов</th>
+                    <th>Прохождений</th>
+                    <th>Создан</th>
+                    <th>Ссылка</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {psychologists.map(p => (
-                    <tr key={p.id}>
-                      <td>{p.full_name}</td>
-                      <td>{p.email}</td>
+                  {tests.map(test => (
+                    <tr key={test.id}>
+                      <td style={{ fontWeight: '600', color: '#1e293b' }}>{test.title}</td>
+                      <td style={{ color: '#64748b' }}>{getPsychName(test.owner_id)}</td>
                       <td>
                         <span style={{
-                          background: p.is_active ? '#dcfce7' : '#fee2e2',
-                          color: p.is_active ? '#166534' : '#991b1b',
-                          padding: '2px 8px', borderRadius: '12px', fontSize: '0.8rem'
+                          background: test.is_published ? '#dcfce7' : '#f1f5f9',
+                          color: test.is_published ? '#166534' : '#64748b',
+                          padding: '3px 10px', borderRadius: '50px',
+                          fontSize: '0.75rem', fontWeight: '600',
                         }}>
-                          {p.is_active ? 'Активен' : 'Заблокирован'}
+                          {test.is_published ? '✅ Опубликован' : '📝 Черновик'}
                         </span>
                       </td>
-                      <td>{p.access_until ? new Date(p.access_until).toLocaleDateString() : 'Не задано'}</td>
-                      <td>{new Date(p.created_at).toLocaleDateString()}</td>
+                      <td style={{ color: '#64748b' }}>{test.questions_count || 0}</td>
+                      <td style={{ color: '#64748b' }}>{test.sessions_count || 0}</td>
+                      <td style={{ color: '#64748b', fontSize: '0.85rem' }}>
+                        {new Date(test.created_at).toLocaleDateString('ru-RU')}
+                      </td>
                       <td>
-                        {editingPsych === p.id ? (
-                          <EditPsychForm
-                            psych={p}
-                            onSave={(updates) => handleUpdatePsychologist(p.id, updates)}
-                            onCancel={() => setEditingPsych(null)}
-                          />
-                        ) : (
-                          <div style={{ display: 'flex', gap: '0.3rem', flexWrap: 'wrap' }}>
-                            <button onClick={() => setEditingPsych(p.id)} className="btn btn-outline">✏️</button>
-                            <button onClick={() => handleBlockPsychologist(p.id, p.is_active)} className="btn btn-outline">
-                              {p.is_active ? '🔒' : '🔓'}
-                            </button>
-                            <button onClick={() => handleExtendAccess(p.id)} className="btn btn-outline">📅</button>
-                            <button onClick={() => handleDeletePsychologist(p.id)} className="btn btn-danger">🗑️</button>
-                          </div>
-                        )}
+                        {test.unique_link ? (
+                          <a href={`${window.location.origin}/form/${test.unique_link}`}
+                            target="_blank" rel="noopener noreferrer"
+                            style={{ color: '#0369a1', fontSize: '0.85rem', fontWeight: '500' }}>
+                            🔗 Ссылка
+                          </a>
+                        ) : '—'}
                       </td>
                     </tr>
                   ))}
-                  {psychologists.length === 0 && (
-                    <tr><td colSpan="6" style={{ textAlign: 'center' }}>Психологов пока нет</td></tr>
+                  {tests.length === 0 && (
+                    <tr>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                        <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📋</div>
+                        Тестов пока нет
+                      </td>
+                    </tr>
                   )}
                 </tbody>
               </table>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ТЕСТЫ */}
-      {activeTab === 'tests' && (
-        <div className="card">
-          <h3>Все тесты ({tests.length})</h3>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Название</th>
-                  <th>Автор</th>
-                  <th>Опубликован</th>
-                  <th>Вопросов</th>
-                  <th>Прохождений</th>
-                  <th>Дата создания</th>
-                  <th>Ссылка</th>
-                </tr>
-              </thead>
-              <tbody>
-                {tests.map(test => (
-                  <tr key={test.id}>
-                    <td>{test.title}</td>
-                    <td>{getPsychologistName(test.owner_id)}</td>
-                    <td>{test.is_published ? '✅' : '❌'}</td>
-                    <td>{test.questions_count || 0}</td>
-                    <td>{test.sessions_count || 0}</td>
-                    <td>{new Date(test.created_at).toLocaleDateString()}</td>
-                    <td>
-                      {test.unique_link ? (
-                        <a href={getTestLink(test.unique_link)} target="_blank" rel="noopener noreferrer">Ссылка</a>
-                      ) : '—'}
-                    </td>
+        {/* СЕССИИ */}
+        {activeTab === 'sessions' && (
+          <div style={{
+            background: 'white', borderRadius: '24px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.06)', overflow: 'hidden',
+          }}>
+            <div style={{ padding: '20px 24px', borderBottom: '1px solid #f1f5f9' }}>
+              <h3 style={{ fontWeight: '700', color: '#1e293b' }}>Все прохождения</h3>
+            </div>
+            <div style={{ overflowX: 'auto' }}>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Клиент</th>
+                    <th>Тест</th>
+                    <th>Статус</th>
+                    <th>Начало</th>
+                    <th>Завершение</th>
+                    <th>Отчёт</th>
                   </tr>
-                ))}
-                {tests.length === 0 && (
-                  <tr><td colSpan="7" style={{ textAlign: 'center' }}>Тестов пока нет</td></tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {sessions.map(sess => {
+                    const test = tests.find(t => t.id === sess.test_id);
+                    return (
+                      <tr key={sess.id}>
+                        <td>
+                          <div style={{ fontWeight: '600', color: '#1e293b' }}>
+                            {sess.client_name || 'Аноним'}
+                          </div>
+                          {sess.client_email && (
+                            <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>
+                              {sess.client_email}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ color: '#64748b', fontSize: '0.9rem' }}>
+                          {test?.title || 'Неизвестно'}
+                        </td>
+                        <td>
+                          <span style={{
+                            background: sess.status === 'completed' ? '#dcfce7' : '#fef9c3',
+                            color: sess.status === 'completed' ? '#166534' : '#92400e',
+                            padding: '3px 10px', borderRadius: '50px',
+                            fontSize: '0.75rem', fontWeight: '600',
+                          }}>
+                            {sess.status === 'completed' ? '✅ Завершён' : '⏳ В процессе'}
+                          </span>
+                        </td>
+                        <td style={{ color: '#64748b', fontSize: '0.85rem' }}>
+                          {new Date(sess.created_at).toLocaleString('ru-RU')}
+                        </td>
+                        <td style={{ color: '#64748b', fontSize: '0.85rem' }}>
+                          {sess.completed_at ? new Date(sess.completed_at).toLocaleString('ru-RU') : '—'}
+                        </td>
+                        <td>
+                          {sess.status === 'completed' && (
+                            <button onClick={() => handleReport(sess.id)} style={{
+                              background: '#e0f2fe', color: '#0369a1',
+                              border: 'none', borderRadius: '50px',
+                              padding: '6px 14px', fontSize: '0.8rem',
+                              fontWeight: '600', cursor: 'pointer',
+                              fontFamily: 'Inter, sans-serif',
+                            }}>
+                              📄 Скачать
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {sessions.length === 0 && (
+                    <tr>
+                      <td colSpan="6" style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>
+                        <div style={{ fontSize: '2rem', marginBottom: '8px' }}>📊</div>
+                        Прохождений пока нет
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* СЕССИИ */}
-      {activeTab === 'sessions' && (
-        <div className="card">
-          <h3>Все прохождения ({sessions.length})</h3>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="table">
-              <thead>
-                <tr>
-                  <th>Клиент</th>
-                  <th>Тест</th>
-                  <th>Статус</th>
-                  <th>Дата начала</th>
-                  <th>Дата завершения</th>
-                  <th>Отчёт</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sessions.map(sess => (
-                  <tr key={sess.id}>
-                    <td>{sess.client_name || 'Аноним'}</td>
-                    <td>{getTestTitle(sess.test_id)}</td>
-                    <td>
-                      <span style={{
-                        background: sess.status === 'completed' ? '#dcfce7' : '#fef3c7',
-                        color: sess.status === 'completed' ? '#166534' : '#92400e',
-                        padding: '2px 8px', borderRadius: '12px', fontSize: '0.8rem'
-                      }}>
-                        {sess.status === 'completed' ? 'Завершён' : 'В процессе'}
-                      </span>
-                    </td>
-                    <td>{new Date(sess.created_at).toLocaleString()}</td>
-                    <td>{sess.completed_at ? new Date(sess.completed_at).toLocaleString() : '—'}</td>
-                    <td>
-                      {sess.status === 'completed' && (
-                        <button onClick={() => handleReport(sess.id)} className="btn btn-outline">📄 Скачать</button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {sessions.length === 0 && (
-                  <tr><td colSpan="6" style={{ textAlign: 'center' }}>Прохождений пока нет</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
 
-// Компонент редактирования психолога
 const EditPsychForm = ({ psych, onSave, onCancel }) => {
   const [full_name, setFullName] = useState(psych.full_name);
   const [email, setEmail] = useState(psych.email);
@@ -348,11 +575,13 @@ const EditPsychForm = ({ psych, onSave, onCancel }) => {
   };
 
   return (
-    <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-      <input type="text" value={full_name} onChange={e => setFullName(e.target.value)} placeholder="ФИО" />
-      <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email" />
-      <button type="submit" className="btn btn-primary">💾</button>
-      <button type="button" onClick={onCancel} className="btn btn-outline">✖</button>
+    <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' }}>
+      <input type="text" value={full_name} onChange={e => setFullName(e.target.value)}
+        placeholder="ФИО" style={{ width: '130px', padding: '6px 10px', fontSize: '0.85rem' }} />
+      <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+        placeholder="Email" style={{ width: '150px', padding: '6px 10px', fontSize: '0.85rem' }} />
+      <button type="submit" className="btn btn-primary" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>💾</button>
+      <button type="button" onClick={onCancel} className="btn btn-outline" style={{ padding: '6px 12px', fontSize: '0.8rem' }}>✖</button>
     </form>
   );
 };
