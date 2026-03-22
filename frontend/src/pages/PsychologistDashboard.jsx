@@ -1,13 +1,13 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { formService } from '../services/formService';
 
 export const PsychologistDashboard = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [tests, setTests] = useState([]);
   const [sessions, setSessions] = useState([]);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [newTest, setNewTest] = useState({ title: '', description: '' });
   const [message, setMessage] = useState({ text: '', type: '' });
   const [loading, setLoading] = useState(true);
 
@@ -36,24 +36,6 @@ export const PsychologistDashboard = () => {
     loadData();
   }, []);
 
-  const handleCreateTest = async (e) => {
-    e.preventDefault();
-    try {
-      await formService.createForm({
-        title: newTest.title,
-        description: newTest.description,
-        is_published: false,
-        show_result_to_client: true,
-      });
-      showMsg('✅ Тест создан!');
-      setNewTest({ title: '', description: '' });
-      setShowCreateForm(false);
-      await loadData();
-    } catch {
-      showMsg('Ошибка создания теста', 'error');
-    }
-  };
-
   const handlePublish = async (test) => {
     try {
       await formService.updateForm(test.id, { is_published: !test.is_published });
@@ -65,10 +47,10 @@ export const PsychologistDashboard = () => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Удалить тест?')) {
+    if (window.confirm('Удалить тест? Все данные прохождений будут потеряны.')) {
       try {
         await formService.deleteForm(id);
-        showMsg('✅ Тест удалён');
+        showMsg('🗑 Тест удалён');
         await loadData();
       } catch {
         showMsg('Ошибка удаления', 'error');
@@ -79,7 +61,7 @@ export const PsychologistDashboard = () => {
   const handleCopyLink = (uniqueLink) => {
     const link = `${window.location.origin}/form/${uniqueLink}`;
     navigator.clipboard.writeText(link);
-    showMsg('✅ Ссылка скопирована!');
+    showMsg('📋 Ссылка скопирована!');
   };
 
   const getTestSessions = (testId) =>
@@ -132,7 +114,7 @@ export const PsychologistDashboard = () => {
           flexWrap: 'wrap', gap: '12px',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <span style={{ fontSize: '1.5rem' }}>{hasAccess ? '✅' : '❌'}</span>
+            <span style={{ fontSize: '1.5rem' }}>{hasAccess ? '✅' : '⛔'}</span>
             <div>
               <div style={{ fontWeight: '700', color: '#1e293b' }}>
                 {hasAccess ? 'Подписка активна' : 'Подписка неактивна'}
@@ -152,9 +134,9 @@ export const PsychologistDashboard = () => {
           gap: '16px', marginBottom: '32px',
         }}>
           {[
-            { emoji: '📋', label: 'Тестов', value: tests.length, color: '#e0f2fe' },
+            { emoji: '📝', label: 'Тестов', value: tests.length, color: '#e0f2fe' },
             { emoji: '✅', label: 'Опубликовано', value: tests.filter(t => t.is_published).length, color: '#f0fdf4' },
-            { emoji: '👥', label: 'Прохождений', value: sessions.filter(s => s.status === 'completed').length, color: '#fef9c3' },
+            { emoji: '📊', label: 'Прохождений', value: sessions.filter(s => s.status === 'completed').length, color: '#fef9c3' },
           ].map(stat => (
             <div key={stat.label} style={{
               background: 'white', borderRadius: '20px', padding: '20px',
@@ -181,40 +163,26 @@ export const PsychologistDashboard = () => {
             display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           }}>
             <h2 style={{ fontWeight: '700', color: '#1e293b' }}>Мои тесты</h2>
-            <button onClick={() => setShowCreateForm(!showCreateForm)} className="btn btn-primary">
+            <button
+              onClick={() => navigate('/psychologist/constructor/new')}
+              className="btn btn-primary"
+            >
               + Создать тест
             </button>
           </div>
-
-          {showCreateForm && (
-            <div style={{ padding: '24px', borderBottom: '1px solid #f1f5f9', background: '#f8fafc' }}>
-              <form onSubmit={handleCreateTest}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                  <div className="form-group">
-                    <label>Название *</label>
-                    <input type="text" value={newTest.title}
-                      onChange={e => setNewTest({ ...newTest, title: e.target.value })}
-                      required />
-                  </div>
-                  <div className="form-group">
-                    <label>Описание</label>
-                    <input type="text" value={newTest.description}
-                      onChange={e => setNewTest({ ...newTest, description: e.target.value })} />
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <button type="submit" className="btn btn-primary">Создать</button>
-                  <button type="button" onClick={() => setShowCreateForm(false)} className="btn btn-outline">Отмена</button>
-                </div>
-              </form>
-            </div>
-          )}
 
           <div style={{ padding: '16px' }}>
             {tests.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '60px 20px', color: '#94a3b8' }}>
                 <div style={{ fontSize: '3rem', marginBottom: '12px' }}>📋</div>
-                <p>У вас пока нет тестов. Нажмите «Создать тест»</p>
+                <p>У вас пока нет тестов.</p>
+                <button
+                  onClick={() => navigate('/psychologist/constructor/new')}
+                  className="btn btn-primary"
+                  style={{ marginTop: '16px' }}
+                >
+                  Создать первый тест
+                </button>
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -236,22 +204,51 @@ export const PsychologistDashboard = () => {
                           {test.is_published ? '✅ Опубликован' : '📝 Черновик'}
                         </span>
                       </div>
+                      {test.description && (
+                        <p style={{ fontSize: '0.85rem', color: '#94a3b8', marginBottom: '6px' }}>
+                          {test.description}
+                        </p>
+                      )}
                       <div style={{ fontSize: '0.85rem', color: '#64748b', display: 'flex', gap: '16px' }}>
-                        <span>📊 {test.questions_count || 0} вопросов</span>
-                        <span>👥 {getTestSessions(test.id).length} прохождений</span>
+                        <span>❓ {test.questions_count || 0} вопросов</span>
+                        <span>📊 {getTestSessions(test.id).length} прохождений</span>
                       </div>
                     </div>
                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                      {/* Редактировать (конструктор) */}
+                      <button
+                        onClick={() => navigate(`/psychologist/constructor/${test.id}`)}
+                        className="btn btn-outline"
+                        style={{ fontSize: '0.8rem' }}
+                      >
+                        ✏️ Редактировать
+                      </button>
+                      {/* Ссылка */}
                       {test.is_published && test.unique_link && (
-                        <button onClick={() => handleCopyLink(test.unique_link)} className="btn btn-outline" style={{ fontSize: '0.8rem' }}>
-                          🔗 Ссылка
+                        <button
+                          onClick={() => handleCopyLink(test.unique_link)}
+                          className="btn btn-outline"
+                          style={{ fontSize: '0.8rem' }}
+                        >
+                          📋 Ссылка
                         </button>
                       )}
-                      <button onClick={() => handlePublish(test)} className="btn btn-outline" style={{ fontSize: '0.8rem' }}>
-                        {test.is_published ? '⏸' : '▶'}
+                      {/* Опубликовать / снять */}
+                      <button
+                        onClick={() => handlePublish(test)}
+                        className="btn btn-outline"
+                        style={{ fontSize: '0.8rem' }}
+                        title={test.is_published ? 'Снять с публикации' : 'Опубликовать'}
+                      >
+                        {test.is_published ? '⏸ Снять' : '▶ Опубликовать'}
                       </button>
-                      <button onClick={() => handleDelete(test.id)} className="btn btn-danger" style={{ fontSize: '0.8rem' }}>
-                        🗑️
+                      {/* Удалить */}
+                      <button
+                        onClick={() => handleDelete(test.id)}
+                        className="btn btn-danger"
+                        style={{ fontSize: '0.8rem' }}
+                      >
+                        🗑
                       </button>
                     </div>
                   </div>

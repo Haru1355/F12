@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_session
 from app.core.dependencies import get_current_user, get_current_psychologist
@@ -15,9 +17,23 @@ from app.services.test_service import (
 )
 from app.schemas.test import TestCreate, TestUpdate, TestResponse, TestListResponse, TestPublicResponse
 from app.schemas.question import QuestionPublicResponse, OptionPublicResponse
+from app.models.test import Test
 from app.models.user import User
 
 router = APIRouter()
+
+
+async def _load_test_with_relations(session: AsyncSession, test_id: int):
+    """Загрузить тест со всеми relations через selectinload."""
+    result = await session.execute(
+        select(Test)
+        .where(Test.id == test_id)
+        .options(
+            selectinload(Test.questions),
+            selectinload(Test.sessions),
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 @router.post("/", response_model=TestResponse, status_code=status.HTTP_201_CREATED)
@@ -27,6 +43,8 @@ async def create_test_endpoint(
     current_user: User = Depends(get_current_psychologist),
 ):
     test = await create_test(session, data, current_user.id)
+    # Перезагружаем с relations чтобы избежать MissingGreenlet
+    test = await _load_test_with_relations(session, test.id)
     return _test_to_response(test)
 
 
@@ -69,7 +87,12 @@ async def get_test_by_link_endpoint(
                 scale_config=q.scale_config, options=options,
             )
         )
-    return TestPublicResponse(id=test.id, title=test.title, description=test.description, questions=questions)
+    return TestPublicResponse(
+        id=test.id,
+        title=test.title,
+        description=test.description,
+        questions=questions,
+    )
 
 
 @router.get("/{test_id}", response_model=TestResponse)
@@ -93,12 +116,15 @@ async def update_test_endpoint(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_psychologist),
 ):
-    test = await get_test_by_id(session, test_id)
+    # Загружаем С relations сразу
+    test = await _load_test_with_relations(session, test_id)
     if not test:
         raise HTTPException(status_code=404, detail="Тест не найден")
     if current_user.role != "admin" and test.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Нет доступа")
     updated = await update_test(session, test, data)
+    # Перезагружаем после обновления
+    updated = await _load_test_with_relations(session, test_id)
     return _test_to_response(updated)
 
 
@@ -128,15 +154,36 @@ async def regenerate_link_endpoint(
     if current_user.role != "admin" and test.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Нет доступа")
     updated = await regenerate_link(session, test)
+    updated = await _load_test_with_relations(session, test_id)
     return _test_to_response(updated)
 
 
 def _test_to_response(test) -> TestResponse:
+    """
+    Безопасное создание ответа.
+    Считаем questions/sessions только если они уже загружены в памяти.
+    """
+    # Проверяем загружены ли relations через __dict__
+    questions_count = 0
+    sessions_count = 0
+
+    if 'questions' in test.__dict__ and test.__dict__['questions'] is not None:
+        questions_count = len(test.__dict__['questions'])
+
+    if 'sessions' in test.__dict__ and test.__dict__['sessions'] is not None:
+        sessions_count = len(test.__dict__['sessions'])
+
     return TestResponse(
-        id=test.id, title=test.title, description=test.description,
-        owner_id=test.owner_id, is_published=test.is_published,
-        unique_link=test.unique_link, show_result_to_client=test.show_result_to_client,
-        scoring_config=test.scoring_config, created_at=test.created_at, updated_at=test.updated_at,
-        questions_count=len(test.questions) if hasattr(test, 'questions') and test.questions else 0,
-        sessions_count=len(test.sessions) if hasattr(test, 'sessions') and test.sessions else 0,
+        id=test.id,
+        title=test.title,
+        description=test.description,
+        owner_id=test.owner_id,
+        is_published=test.is_published,
+        unique_link=test.unique_link,
+        show_result_to_client=test.show_result_to_client,
+        scoring_config=test.scoring_config,
+        created_at=test.created_at,
+        updated_at=test.updated_at,
+        questions_count=questions_count,
+        sessions_count=sessions_count,
     )

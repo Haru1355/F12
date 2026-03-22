@@ -13,8 +13,8 @@ export const formService = {
     return response.data.tests;
   },
 
-  // Получить тест по ID
-  getForm: async (id) => {
+  // Получить тест по ID (для конструктора — с подробностями)
+  getFormById: async (id) => {
     const response = await api.get(`/tests/${id}`);
     return response.data;
   },

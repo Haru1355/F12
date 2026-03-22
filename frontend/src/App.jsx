@@ -8,6 +8,7 @@ import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminProfile } from './pages/AdminProfile';
 import { PsychologistDashboard } from './pages/PsychologistDashboard';
 import { PsychologistProfile } from './pages/PsychologistProfile';
+import { TestConstructor } from './pages/TestConstructor';
 import { ClientForm } from './pages/ClientForm';
 
 function App() {
@@ -41,6 +42,18 @@ function App() {
           <Route path="/psychologist/profile" element={
             <ProtectedRoute allowedRoles={['psychologist']}>
               <PsychologistProfile />
+            </ProtectedRoute>
+          } />
+
+          {/* Конструктор тестов */}
+          <Route path="/psychologist/constructor/new" element={
+            <ProtectedRoute allowedRoles={['psychologist', 'admin']}>
+              <TestConstructor />
+            </ProtectedRoute>
+          } />
+          <Route path="/psychologist/constructor/:testId" element={
+            <ProtectedRoute allowedRoles={['psychologist', 'admin']}>
+              <TestConstructor />
             </ProtectedRoute>
           } />
         </Routes>
