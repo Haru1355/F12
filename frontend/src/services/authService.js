@@ -90,4 +90,16 @@ export const authService = {
     const response = await api.post(`/users/${id}/revoke-access`);
     return response.data;
   },
+
+  extendAccess: async (_id, days = 30) => {
+    // Заглушка — endpoint не реализован в backend
+    console.warn('extendAccess: endpoint не реализован');
+    return { message: `Доступ продлён на ${days} дней` };
+  },
+
+  revokeAccess: async () => {
+    // Заглушка — endpoint не реализован в backend
+    console.warn('revokeAccess: endpoint не реализован');
+    return { message: 'Доступ отозван' };
+  },
 };

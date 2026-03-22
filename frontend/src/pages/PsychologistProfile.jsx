@@ -89,6 +89,12 @@ export const PsychologistProfile = () => {
     : null;
 
   const accessUntil = profile.access_until ? new Date(profile.access_until) : null;
+  const hasAccess = (() => {
+    if (!profile.is_active) return false;
+    if (profile.role === 'admin') return true;
+    if (!profile.access_until) return true;
+    return new Date(profile.access_until) > new Date();
+  })();
   const daysLeft = accessUntil
     ? Math.ceil((accessUntil - new Date()) / (1000 * 60 * 60 * 24))
     : null;
@@ -178,7 +184,7 @@ export const PsychologistProfile = () => {
             </div>
           </div>
 
-          {/* Поля профиля */}
+          {/* Поля */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
             {[
               { label: 'ФИО', field: 'full_name', emoji: '👤', type: 'text' },
@@ -222,7 +228,7 @@ export const PsychologistProfile = () => {
                 value={formData.bio}
                 onChange={e => setFormData({ ...formData, bio: e.target.value })}
                 rows={4}
-                placeholder="Расскажите о вашем опыте и методах работы..."
+                placeholder="Расскажите о вашем опыте..."
                 style={{ width: '100%', padding: '8px 10px', fontSize: '0.9rem' }}
               />
             ) : (
@@ -242,21 +248,21 @@ export const PsychologistProfile = () => {
             📅 Статус подписки
           </h3>
           <div style={{
-            background: profile.has_active_access ? '#f0fdf4' : '#fee2e2',
+            background: hasAccess ? '#f0fdf4' : '#fee2e2',
             borderRadius: '14px', padding: '16px',
-            border: `2px solid ${profile.has_active_access ? '#86efac' : '#fca5a5'}`,
+            border: `2px solid ${hasAccess ? '#86efac' : '#fca5a5'}`,
           }}>
-            <div style={{ fontWeight: '700', color: profile.has_active_access ? '#166534' : '#991b1b' }}>
-              {profile.has_active_access ? '✅ Подписка активна' : '❌ Подписка неактивна'}
+            <div style={{ fontWeight: '700', color: hasAccess ? '#166534' : '#991b1b' }}>
+              {hasAccess ? '✅ Подписка активна' : '❌ Подписка неактивна'}
             </div>
             <div style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '6px' }}>
               {accessUntil
-                ? `Действует до ${accessUntil.toLocaleDateString('ru-RU')} (осталось ${daysLeft} дн.)`
+                ? `До ${accessUntil.toLocaleDateString('ru-RU')} (осталось ${daysLeft} дн.)`
                 : 'Бессрочный доступ'}
             </div>
-            {!profile.has_active_access && (
+            {!hasAccess && (
               <div style={{ fontSize: '0.85rem', color: '#991b1b', marginTop: '8px', fontWeight: '600' }}>
-                Обратитесь к администратору для продления доступа
+                Обратитесь к администратору для продления
               </div>
             )}
           </div>
