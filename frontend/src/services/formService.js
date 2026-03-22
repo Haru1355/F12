@@ -1,27 +1,84 @@
-const FORMS_KEY = 'psych_forms';
+import api from './api';
 
 export const formService = {
-  getFormsByPsychologist: (psychologistId) => {
-    const forms = JSON.parse(localStorage.getItem(FORMS_KEY) || '[]');
-    return forms.filter(f => f.psychologistId === psychologistId);
+  // Получить все тесты (для админа)
+  getAllForms: async () => {
+    const response = await api.get('/tests/');
+    return response.data.tests;
   },
 
-  createForm: (psychologistId, title, questions) => {
-    const forms = JSON.parse(localStorage.getItem(FORMS_KEY) || '[]');
-    const newForm = {
-      id: Date.now().toString(),
-      psychologistId,
-      title,
-      questions, // массив объектов { questionText, type: 'text'|'radio'... }
-      createdAt: new Date().toISOString()
-    };
-    forms.push(newForm);
-    localStorage.setItem(FORMS_KEY, JSON.stringify(forms));
-    return newForm;
+  // Получить тесты текущего психолога
+  getMyForms: async () => {
+    const response = await api.get('/tests/');
+    return response.data.tests;
   },
 
-  getForm: (formId) => {
-    const forms = JSON.parse(localStorage.getItem(FORMS_KEY) || '[]');
-    return forms.find(f => f.id === formId);
-  }
+  // Получить тест по ID
+  getForm: async (id) => {
+    const response = await api.get(`/tests/${id}`);
+    return response.data;
+  },
+
+  // Получить тест по публичной ссылке (для клиента)
+  getFormByLink: async (link) => {
+    const response = await api.get(`/tests/by-link/${link}`);
+    return response.data;
+  },
+
+  // Создать тест
+  createForm: async (data) => {
+    const response = await api.post('/tests/', data);
+    return response.data;
+  },
+
+  // Обновить тест
+  updateForm: async (id, data) => {
+    const response = await api.patch(`/tests/${id}`, data);
+    return response.data;
+  },
+
+  // Удалить тест
+  deleteForm: async (id) => {
+    await api.delete(`/tests/${id}`);
+  },
+
+  // Сгенерировать новую ссылку
+  regenerateLink: async (id) => {
+    const response = await api.post(`/tests/${id}/regenerate-link`);
+    return response.data;
+  },
+
+  // Вопросы
+  getQuestions: async (testId) => {
+    const response = await api.get(`/tests/${testId}/questions`);
+    return response.data;
+  },
+
+  addQuestion: async (testId, data) => {
+    const response = await api.post(`/tests/${testId}/questions`, data);
+    return response.data;
+  },
+
+  updateQuestions: async (testId, questions) => {
+    const response = await api.put(`/tests/${testId}/questions/bulk`, questions);
+    return response.data;
+  },
+
+  // Все сессии (прохождения)
+  getAllResponses: async () => {
+    const response = await api.get('/sessions/');
+    return response.data.sessions;
+  },
+
+  // Сессии по тесту
+  getResponsesByTest: async (testId) => {
+    const response = await api.get(`/sessions/?test_id=${testId}`);
+    return response.data.sessions;
+  },
+
+  // Детали сессии
+  getResponseDetail: async (sessionId) => {
+    const response = await api.get(`/sessions/${sessionId}`);
+    return response.data;
+  },
 };

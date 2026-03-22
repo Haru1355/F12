@@ -7,41 +7,54 @@ export const ClientForm = () => {
   const [form, setForm] = useState(null);
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [clientName, setClientName] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    const found = formService.getForm(formId);
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setForm(found);
-    if (found) {
-      const initialAnswers = {};
-      found.questions.forEach((q, idx) => {
-        initialAnswers[idx] = '';
-      });
-      setAnswers(initialAnswers);
-    }
+    const loadForm = async () => {
+      try {
+        const found = await formService.getForm(formId);
+        setForm(found);
+        if (found) {
+          const initialAnswers = {};
+          found.questions.forEach((q, idx) => {
+            initialAnswers[idx] = '';
+          });
+          setAnswers(initialAnswers);
+        }
+      // eslint-disable-next-line no-unused-vars
+      } catch (err) {
+        setError('Форма не найдена');
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadForm();
   }, [formId]);
 
   const handleAnswerChange = (idx, value) => {
     setAnswers(prev => ({ ...prev, [idx]: value }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Сохраняем ответы в localStorage для демонстрации
-    const allAnswers = {
-      formId,
-      submittedAt: new Date().toISOString(),
-      answers
-    };
-    const saved = JSON.parse(localStorage.getItem('form_responses') || '[]');
-    saved.push(allAnswers);
-    localStorage.setItem('form_responses', JSON.stringify(saved));
-    alert('Спасибо! Ваши ответы сохранены.');
-    setSubmitted(true);
+    if (!clientName.trim()) {
+      alert('Пожалуйста, введите ваше имя');
+      return;
+    }
+    try {
+      await formService.saveResponse(formId, clientName, answers);
+      alert('Спасибо! Ваши ответы сохранены.');
+      setSubmitted(true);
+    // eslint-disable-next-line no-unused-vars
+    } catch (err) {
+      alert('Ошибка при сохранении ответов');
+    }
   };
 
-  if (!form) return <div className="container" style={{ marginTop: '3rem' }}>Форма не найдена</div>;
-
+  if (loading) return <div className="container" style={{ marginTop: '3rem' }}>Загрузка...</div>;
+  if (error || !form) return <div className="container" style={{ marginTop: '3rem' }}>Форма не найдена</div>;
   if (submitted) return (
     <div className="container" style={{ marginTop: '3rem', textAlign: 'center' }}>
       <div className="card">
@@ -56,6 +69,10 @@ export const ClientForm = () => {
       <div className="card">
         <h1 style={{ marginBottom: '1rem' }}>{form.title}</h1>
         <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>Ваше имя</label>
+            <input type="text" value={clientName} onChange={(e) => setClientName(e.target.value)} required placeholder="Введите ваше имя" />
+          </div>
           {form.questions.map((q, idx) => (
             <div key={idx} className="form-group">
               <label>{q.questionText}</label>

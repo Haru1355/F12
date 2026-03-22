@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 export const Login = () => {
@@ -11,34 +11,48 @@ export const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+
     const result = await login(email, password);
     if (result.success) {
-      navigate('/');
+      const user = JSON.parse(localStorage.getItem('user'));
+      if (user?.role === 'admin') navigate('/admin');
+      else if (user?.role === 'psychologist') navigate('/psychologist');
+      else navigate('/');
     } else {
       setError(result.error);
     }
   };
 
   return (
-    <div className="container" style={{ maxWidth: '400px', marginTop: '3rem' }}>
-      <div className="card">
-        <h2 style={{ marginBottom: '1.5rem' }}>Вход в аккаунт</h2>
-        {error && <div className="alert alert-error">{error}</div>}
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Email</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          </div>
-          <div className="form-group">
-            <label>Пароль</label>
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
-          </div>
-          <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>Войти</button>
-        </form>
-        <p style={{ marginTop: '1rem', textAlign: 'center' }}>
-          Нет аккаунта? <Link to="/register">Зарегистрироваться</Link>
-        </p>
-      </div>
+    <div style={{ maxWidth: '400px', margin: '100px auto', padding: '20px' }}>
+      <h2>Вход в систему</h2>
+      {error && <p style={{ color: 'red' }}>{error}</p>}
+      <form onSubmit={handleSubmit}>
+        <div style={{ marginBottom: '15px' }}>
+          <label>Email</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+          />
+        </div>
+        <div style={{ marginBottom: '15px' }}>
+          <label>Пароль</label>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            style={{ width: '100%', padding: '8px', marginTop: '5px' }}
+          />
+        </div>
+        <button type="submit" style={{ width: '100%', padding: '10px', cursor: 'pointer' }}>
+          Войти
+        </button>
+      </form>
     </div>
   );
 };

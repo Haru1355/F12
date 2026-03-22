@@ -11,7 +11,6 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Проверяем, есть ли сохранённый пользователь
     const storedUser = authService.getCurrentUser();
     if (storedUser) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -21,25 +20,23 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
-    const userData = await authService.login(email, password);
-    if (userData) {
+    try {
+      const userData = await authService.login(email, password);
       setUser(userData);
       return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
     }
-    return { success: false, error: 'Неверный email или пароль' };
   };
 
   const register = async (email, password, role, name) => {
-    // Для простоты регистрация возможна только как психолог (администратор создаётся отдельно)
-    if (role === 'admin') {
-      return { success: false, error: 'Регистрация администратора недоступна' };
+    try {
+      const userData = await authService.register(email, password, role, name);
+      setUser(userData);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
     }
-    const result = await authService.register(email, password, role, name);
-    if (result.success) {
-      // После регистрации автоматически логиним
-      return await login(email, password);
-    }
-    return result;
   };
 
   const logout = () => {
@@ -47,13 +44,7 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  const value = {
-    user,
-    login,
-    register,
-    logout,
-    loading
-  };
+  const value = { user, login, register, logout, loading };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
