@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from typing import Optional, List
+from sqlalchemy import select, func, and_
+from typing import Optional, List, Tuple
 from datetime import datetime, timedelta
 
 from app.models.user import User
@@ -81,74 +82,65 @@ async def authenticate_user(
 
 
 async def extend_user_access(
-    session: AsyncSession, 
-    user: User, 
-    days: int
-) -> tuple[Optional[datetime], datetime]:
+    session: AsyncSession,
+    user: User,
+    days: int,
+) -> Tuple[Optional[datetime], datetime]:
     """
-    Продлить доступ пользователя.
-    
-    Args:
-        session: Сессия БД
-        user: Пользователь
-        days: Количество дней для продления
-    
-    Returns:
-        Tuple (старая дата, новая дата)
+    Продлить доступ пользователя на N дней.
+    Возвращает (старая_дата, новая_дата).
     """
-    old_access_until = user.access_until
+    old_date = user.access_until
 
-    if user.access_until is None or user.access_until < datetime.utcnow():
-        base_date = datetime.utcnow()
+    if user.access_until and user.access_until > datetime.utcnow():
+        # Продлеваем от текущей даты окончания
+        user.access_until = user.access_until + timedelta(days=days)
     else:
-        base_date = user.access_until
-    
-    user.access_until = base_date + timedelta(days=days)
-    
+        # Продлеваем от сейчас
+        user.access_until = datetime.utcnow() + timedelta(days=days)
+
     await session.commit()
     await session.refresh(user)
-    
-    return old_access_until, user.access_until
+    return old_date, user.access_until
 
 
-async def set_unlimited_access(
-    session: AsyncSession,
-    user: User
-) -> None:
-    """Установить бессрочный доступ (для админов или VIP-клиентов)."""
+async def set_unlimited_access(session: AsyncSession, user: User) -> User:
+    """Установить бессрочный доступ (access_until = None)."""
     user.access_until = None
+    user.is_active = True
     await session.commit()
     await session.refresh(user)
+    return user
 
 
-async def revoke_access(
-    session: AsyncSession,
-    user: User
-) -> None:
-    """Немедленно отозвать доступ (установить дату в прошлое)."""
-    user.access_until = datetime.utcnow() - timedelta(days=1)
+async def revoke_access(session: AsyncSession, user: User) -> User:
+    """Немедленно отозвать доступ."""
+    user.access_until = datetime.utcnow() - timedelta(seconds=1)
     await session.commit()
     await session.refresh(user)
+    return user
 
 
 async def get_users_with_expiring_access(
     session: AsyncSession,
-    days_threshold: int = 7
-) -> list[User]:
+    days_threshold: int = 7,
+) -> List[User]:
     """
-    Получить пользователей, у которых доступ истекает в ближайшие N дней.
-    Для отправки уведомлений.
+    Получить пользователей у которых доступ истекает
+    в течение days_threshold дней.
     """
-    threshold_date = datetime.utcnow() + timedelta(days=days_threshold)
-    
+    now = datetime.utcnow()
+    threshold = now + timedelta(days=days_threshold)
+
     result = await session.execute(
         select(User).where(
-            User.is_active == True,
-            User.role == "psychologist",
-            User.access_until.isnot(None),
-            User.access_until <= threshold_date,
-            User.access_until > datetime.utcnow()
-        )
+            and_(
+                User.role == "psychologist",
+                User.is_active == True,
+                User.access_until != None,
+                User.access_until >= now,
+                User.access_until <= threshold,
+            )
+        ).order_by(User.access_until.asc())
     )
-    
     return result.scalars().all()
