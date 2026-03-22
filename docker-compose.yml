@@ -8,8 +8,6 @@ services:
       POSTGRES_DB: profdnk
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -30,12 +28,20 @@ services:
       ACCESS_TOKEN_EXPIRE_MINUTES: "1440"
       ADMIN_EMAIL: admin@profdnk.ru
       ADMIN_PASSWORD: admin123
-      FRONTEND_URL: http://localhost:5173
+      FRONTEND_URL: http://ТУТ_ТВОЙ_IP  # <-- поменяй
     depends_on:
       db:
         condition: service_healthy
     volumes:
       - ./backend:/app
+
+  frontend:
+    build: ./frontend
+    container_name: profdnk_frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
 
 volumes:
   pgdata:

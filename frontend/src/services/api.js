@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api/v1',
+  baseURL: '/api/v1',  // <-- убираем localhost, nginx сам проксирует
   headers: {
     'Content-Type': 'application/json',
   },
@@ -16,7 +16,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Если токен истёк — разлогиниваем
+// Если токен истёк – разлогиниваем
 api.interceptors.response.use(
   (response) => response,
   (error) => {
