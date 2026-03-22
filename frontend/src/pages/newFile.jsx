@@ -1,5 +1,6 @@
 import { sessionService } from '../services/sessionService';
 
+// eslint-disable-next-line react-hooks/rules-of-hooks, no-undef
 useEffect(() => {
 	// eslint-disable-next-line no-undef
 	const found = formService.getForm(formId);

@@ -1,190 +1,400 @@
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { authService } from '../services/authService';
-import { formService } from '../services/formService';
 
 export const PsychologistProfile = () => {
-  const { user } = useAuth();
-  const [profile, setProfile] = useState(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    phone: '',
-    telegram: '',
-    whatsapp: '',
-    bio: '',
-    avatar: ''
-  });
-  const [message, setMessage] = useState('');
-  const [recentForms, setRecentForms] = useState([]);
+  const { user, setUser } = useAuth();
   const fileInputRef = useRef(null);
 
+  const [editing, setEditing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState('');
+  const [profile, setProfile] = useState({
+    full_name: '',
+    phone: '',
+    telegram: '',
+    education_level: '',
+    bio: '',
+    avatar_url: '',
+  });
+
   useEffect(() => {
-    if (user) {
-      const users = JSON.parse(localStorage.getItem('psych_users'));
-      const fullUser = users.find(u => u.id === user.id);
-      if (fullUser) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setProfile(fullUser);
-        setFormData({
-          name: fullUser.name || '',
-          phone: fullUser.phone || '',
-          telegram: fullUser.telegram || '',
-          whatsapp: fullUser.whatsapp || '',
-          bio: fullUser.bio || '',
-          avatar: fullUser.avatar || ''
-        });
-      }
-      const forms = formService.getFormsByPsychologist(user.id);
-      setRecentForms(forms.slice(-3).reverse());
-    }
-  }, [user]);
+    loadProfile();
+  }, [loadProfile]);
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleAvatarChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData(prev => ({ ...prev, avatar: reader.result }));
-      };
-      reader.readAsDataURL(file);
+  const loadProfile = async () => {
+    try {
+      const data = await authService.getMe();
+      setProfile({
+        full_name: data.full_name || '',
+        phone: data.phone || '',
+        telegram: data.telegram || '',
+        education_level: data.education_level || '',
+        bio: data.bio || '',
+        avatar_url: data.avatar_url || '',
+      });
+      if (setUser) setUser(data);
+    } catch {
+      showMsg('Ошибка загрузки профиля');
     }
   };
 
-  const handleSubmit = async (e) => {
+  const showMsg = (msg) => {
+    setMessage(msg);
+    setTimeout(() => setMessage(''), 3000);
+  };
+
+  const handleSave = async (e) => {
     e.preventDefault();
-    const result = await authService.updateProfile(user.id, formData);
-    if (result.success) {
-      setMessage('Профиль успешно обновлён');
-      setTimeout(() => setMessage(''), 3000);
-      setIsEditing(false);
-      setProfile(prev => ({ ...prev, ...formData }));
-    } else {
-      setMessage('Ошибка при обновлении');
+    setLoading(true);
+    try {
+      const updated = await authService.updateProfile({
+        full_name: profile.full_name,
+        phone: profile.phone,
+        telegram: profile.telegram,
+        education_level: profile.education_level,
+        bio: profile.bio,
+      });
+      setProfile((prev) => ({ ...prev, ...updated }));
+      if (setUser) setUser(updated);
+      setEditing(false);
+      showMsg('Профиль сохранён');
+    } catch {
+      showMsg('Ошибка сохранения');
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (!profile) return <div className="container">Загрузка...</div>;
-
-  const getInitials = (name) => {
-    return name
-      .split(' ')
-      .map(n => n[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
   };
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setLoading(true);
+      const updated = await authService.uploadAvatar(file);
+      setProfile((prev) => ({ ...prev, avatar_url: updated.avatar_url }));
+      if (setUser) setUser(updated);
+      showMsg('Фото обновлено');
+    } catch {
+      showMsg('Ошибка загрузки фото');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const avatarSrc = profile.avatar_url
+    ? `http://localhost:8000${profile.avatar_url}`
+    : null;
+
+  const educationOptions = [
+    'Среднее специальное',
+    'Бакалавриат',
+    'Магистратура',
+    'Аспирантура / PhD',
+    'Кандидат наук',
+    'Доктор наук',
+    'Курсы повышения квалификации',
+  ];
 
   return (
-    <div className="container" style={{ maxWidth: '1000px', marginTop: '2rem' }}>
-      {message && <div className="alert alert-success">{message}</div>}
-      
-      <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        {/* Шапка профиля */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flexWrap: 'wrap' }}>
-          <div style={{ position: 'relative' }}>
-            {profile.avatar ? (
-              <img src={profile.avatar} alt="avatar" style={{ width: '120px', height: '120px', borderRadius: '50%', objectFit: 'cover' }} />
-            ) : (
-              <div style={{ width: '120px', height: '120px', borderRadius: '50%', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.5rem', fontWeight: 'bold', color: 'white' }}>
-                {getInitials(profile.name)}
-              </div>
-            )}
-            {isEditing && (
-              <button onClick={() => fileInputRef.current.click()} style={{ position: 'absolute', bottom: 0, right: 0, background: '#4a90e2', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid white', cursor: 'pointer' }}>
-                📷
-              </button>
-            )}
-            <input type="file" ref={fileInputRef} style={{ display: 'none' }} accept="image/*" onChange={handleAvatarChange} />
+    <div style={{ maxWidth: 800, margin: '2rem auto', padding: '0 1rem' }}>
+      {message && (
+        <div
+          style={{
+            background: '#dcfce7',
+            color: '#166534',
+            padding: '12px 16px',
+            borderRadius: 8,
+            marginBottom: 16,
+            textAlign: 'center',
+          }}
+        >
+          {message}
+        </div>
+      )}
+
+      {/* ── Карточка профиля ── */}
+      <div
+        style={{
+          background: '#fff',
+          borderRadius: 16,
+          boxShadow: '0 4px 24px rgba(0,0,0,0.08)',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Шапка */}
+        <div
+          style={{
+            background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+            height: 120,
+            position: 'relative',
+          }}
+        />
+
+        {/* Аватар */}
+        <div style={{ display: 'flex', justifyContent: 'center', marginTop: -50 }}>
+          <div
+            onClick={handleAvatarClick}
+            title="Нажмите чтобы сменить фото"
+            style={{
+              width: 100,
+              height: 100,
+              borderRadius: '50%',
+              border: '4px solid #fff',
+              background: avatarSrc ? `url(${avatarSrc}) center/cover` : '#e0e7ff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              fontSize: 36,
+              fontWeight: 700,
+              color: '#6366f1',
+              position: 'relative',
+              overflow: 'hidden',
+            }}
+          >
+            {!avatarSrc && (profile.full_name?.charAt(0)?.toUpperCase() || '?')}
+            <div
+              style={{
+                position: 'absolute',
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: 28,
+                background: 'rgba(0,0,0,0.5)',
+                color: '#fff',
+                fontSize: 11,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              📷
+            </div>
           </div>
-          <div>
-            {isEditing ? (
-              <input type="text" name="name" value={formData.name} onChange={handleInputChange} placeholder="ФИО" style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '0.5rem' }} />
-            ) : (
-              <h1 style={{ fontSize: '1.8rem' }}>{profile.name}</h1>
-            )}
-            <p style={{ color: '#64748b' }}>Психолог • {profile.email}</p>
-          </div>
-          <div style={{ marginLeft: 'auto' }}>
-            {!isEditing ? (
-              <button onClick={() => setIsEditing(true)} className="btn btn-primary">Редактировать профиль</button>
-            ) : (
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={handleSubmit} className="btn btn-primary">Сохранить</button>
-                <button onClick={() => setIsEditing(false)} className="btn btn-outline">Отмена</button>
-              </div>
-            )}
-          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={handleAvatarChange}
+          />
         </div>
 
-        {/* О себе */}
-        <div>
-          <h3>О себе</h3>
-          {isEditing ? (
-            <textarea name="bio" value={formData.bio} onChange={handleInputChange} rows="4" placeholder="Расскажите о вашем опыте, методах работы..." style={{ width: '100%' }} />
+        {/* Содержимое */}
+        <div style={{ padding: '16px 32px 32px' }}>
+          {!editing ? (
+            /* ── Режим просмотра ── */
+            <>
+              <div style={{ textAlign: 'center', marginBottom: 24 }}>
+                <h1 style={{ margin: '8px 0 4px', fontSize: 24 }}>{profile.full_name}</h1>
+                <span
+                  style={{
+                    background: '#e0e7ff',
+                    color: '#4338ca',
+                    padding: '3px 12px',
+                    borderRadius: 20,
+                    fontSize: 13,
+                  }}
+                >
+                  Психолог
+                </span>
+              </div>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 16,
+                  marginBottom: 24,
+                }}
+              >
+                <InfoBlock label="📧 Email" value={user?.email} />
+                <InfoBlock label="📱 Телефон" value={profile.phone || '—'} />
+                <InfoBlock label="✈️ Telegram" value={profile.telegram || '—'} />
+                <InfoBlock label="🎓 Образование" value={profile.education_level || '—'} />
+              </div>
+
+              {profile.bio && (
+                <div style={{ marginBottom: 24 }}>
+                  <div style={{ fontWeight: 600, marginBottom: 4, color: '#374151' }}>
+                    О себе
+                  </div>
+                  <p style={{ color: '#6b7280', lineHeight: 1.6 }}>{profile.bio}</p>
+                </div>
+              )}
+
+              <div style={{ textAlign: 'center' }}>
+                <button
+                  onClick={() => setEditing(true)}
+                  style={{
+                    background: '#6366f1',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '10px 32px',
+                    fontSize: 15,
+                    cursor: 'pointer',
+                  }}
+                >
+                  ✏️ Редактировать профиль
+                </button>
+              </div>
+            </>
           ) : (
-            <p>{profile.bio || 'Информация не заполнена'}</p>
+            /* ── Режим редактирования ── */
+            <form onSubmit={handleSave}>
+              <h2 style={{ marginBottom: 20 }}>Редактирование профиля</h2>
+
+              <Field label="ФИО *">
+                <input
+                  type="text"
+                  value={profile.full_name}
+                  onChange={(e) =>
+                    setProfile({ ...profile, full_name: e.target.value })
+                  }
+                  required
+                  style={inputStyle}
+                />
+              </Field>
+
+              <Field label="Телефон">
+                <input
+                  type="tel"
+                  value={profile.phone}
+                  onChange={(e) =>
+                    setProfile({ ...profile, phone: e.target.value })
+                  }
+                  placeholder="+7 (999) 123-45-67"
+                  style={inputStyle}
+                />
+              </Field>
+
+              <Field label="Telegram">
+                <input
+                  type="text"
+                  value={profile.telegram}
+                  onChange={(e) =>
+                    setProfile({ ...profile, telegram: e.target.value })
+                  }
+                  placeholder="@username"
+                  style={inputStyle}
+                />
+              </Field>
+
+              <Field label="Уровень образования">
+                <select
+                  value={profile.education_level}
+                  onChange={(e) =>
+                    setProfile({ ...profile, education_level: e.target.value })
+                  }
+                  style={inputStyle}
+                >
+                  <option value="">— Выберите —</option>
+                  {educationOptions.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+
+              <Field label="О себе">
+                <textarea
+                  value={profile.bio}
+                  onChange={(e) =>
+                    setProfile({ ...profile, bio: e.target.value })
+                  }
+                  rows={4}
+                  placeholder="Расскажите о своём опыте, специализации..."
+                  style={{ ...inputStyle, resize: 'vertical' }}
+                />
+              </Field>
+
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 12,
+                  justifyContent: 'flex-end',
+                  marginTop: 16,
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditing(false);
+                    loadProfile();
+                  }}
+                  style={{
+                    background: '#f3f4f6',
+                    border: '1px solid #d1d5db',
+                    borderRadius: 8,
+                    padding: '10px 24px',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    background: '#6366f1',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: 8,
+                    padding: '10px 24px',
+                    cursor: 'pointer',
+                    opacity: loading ? 0.6 : 1,
+                  }}
+                >
+                  {loading ? 'Сохранение...' : '💾 Сохранить'}
+                </button>
+              </div>
+            </form>
           )}
         </div>
-
-        {/* Контакты */}
-        <div>
-          <h3>Контакты для связи</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-            <div>
-              <label>Телефон</label>
-              {isEditing ? (
-                <input type="tel" name="phone" value={formData.phone} onChange={handleInputChange} placeholder="+7 XXX XXX-XX-XX" />
-              ) : (
-                <p>{profile.phone || 'Не указан'}</p>
-              )}
-            </div>
-            <div>
-              <label>Telegram</label>
-              {isEditing ? (
-                <input type="text" name="telegram" value={formData.telegram} onChange={handleInputChange} placeholder="@username" />
-              ) : (
-                <p>{profile.telegram || 'Не указан'}</p>
-              )}
-            </div>
-            <div>
-              <label>WhatsApp</label>
-              {isEditing ? (
-                <input type="text" name="whatsapp" value={formData.whatsapp} onChange={handleInputChange} placeholder="+7 XXX XXX-XX-XX" />
-              ) : (
-                <p>{profile.whatsapp || 'Не указан'}</p>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Портфолио тестов */}
-      <div className="card" style={{ marginTop: '1.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <h2>Мои опросы</h2>
-          <a href="/psychologist" className="btn btn-outline">Управлять опросами</a>
-        </div>
-        {recentForms.length === 0 ? (
-          <p>У вас пока нет опросов. <a href="/psychologist">Создайте первый опрос</a></p>
-        ) : (
-          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))' }}>
-            {recentForms.map(form => (
-              <div key={form.id} className="card" style={{ marginBottom: 0 }}>
-                <h3>{form.title}</h3>
-                <p>Создан: {new Date(form.createdAt).toLocaleDateString()}</p>
-                <p>Вопросов: {form.questions.length}</p>
-                <a href={`/form/${form.id}`} target="_blank" rel="noopener noreferrer">Посмотреть опрос</a>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );
+};
+
+/* ── Вспомогательные компоненты ── */
+
+const InfoBlock = ({ label, value }) => (
+  <div>
+    <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 2 }}>{label}</div>
+    <div style={{ fontSize: 15, color: '#374151' }}>{value}</div>
+  </div>
+);
+
+const Field = ({ label, children }) => (
+  <div style={{ marginBottom: 16 }}>
+    <label
+      style={{
+        display: 'block',
+        fontWeight: 600,
+        marginBottom: 6,
+        fontSize: 14,
+        color: '#374151',
+      }}
+    >
+      {label}
+    </label>
+    {children}
+  </div>
+);
+
+const inputStyle = {
+  width: '100%',
+  padding: '10px 12px',
+  border: '1px solid #d1d5db',
+  borderRadius: 8,
+  fontSize: 14,
+  boxSizing: 'border-box',
+  outline: 'none',
 };

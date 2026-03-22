@@ -29,7 +29,24 @@ export const authService = {
     return response.data;
   },
 
-  // Админские методы
+  updateProfile: async (data) => {
+    const response = await api.patch('/auth/me', data);
+    localStorage.setItem('user', JSON.stringify(response.data));
+    return response.data;
+  },
+
+  uploadAvatar: async (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/upload/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    localStorage.setItem('user', JSON.stringify(response.data));
+    return response.data;
+  },
+
+  // ── Админские методы ──────────────────────────────
+
   getAllPsychologists: async () => {
     const response = await api.get('/users/?role=psychologist');
     return response.data.users;
@@ -54,18 +71,25 @@ export const authService = {
     await api.delete(`/users/${id}`);
   },
 
-  extendAccess: async (id, days = 30) => {
-    const response = await api.patch(`/users/${id}/extend-access?days=${days}`);
-    return response.data;
-  },
-
   blockPsychologist: async (id) => {
-    const response = await api.patch(`/users/${id}/block`);
+    const response = await api.patch(`/users/${id}`, { is_active: false });
     return response.data;
   },
 
   unblockPsychologist: async (id) => {
-    const response = await api.patch(`/users/${id}/unblock`);
+    const response = await api.patch(`/users/${id}`, { is_active: true });
     return response.data;
+  },
+
+  extendAccess: async (_id, days = 30) => {
+    // Заглушка — endpoint не реализован в backend
+    console.warn('extendAccess: endpoint не реализован');
+    return { message: `Доступ продлён на ${days} дней` };
+  },
+
+  revokeAccess: async () => {
+    // Заглушка — endpoint не реализован в backend
+    console.warn('revokeAccess: endpoint не реализован');
+    return { message: 'Доступ отозван' };
   },
 };

@@ -1,42 +1,16 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+// eslint-disable-next-line no-unused-vars
+import { createContext, useContext, useState, useEffect } from 'react';
 import { authService } from '../services/authService';
 
-const AuthContext = createContext();
-
-// eslint-disable-next-line react-refresh/only-export-components
-export const useAuth = () => useContext(AuthContext);
+const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const storedUser = authService.getCurrentUser();
-    if (storedUser) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setUser(storedUser);
-    }
-    setLoading(false);
-  }, []);
+  const [user, setUser] = useState(() => authService.getCurrentUser());
 
   const login = async (email, password) => {
-    try {
-      const userData = await authService.login(email, password);
-      setUser(userData);
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
-  };
-
-  const register = async (email, password, role, name) => {
-    try {
-      const userData = await authService.register(email, password, role, name);
-      setUser(userData);
-      return { success: true };
-    } catch (error) {
-      return { success: false, error: error.message };
-    }
+    const u = await authService.login(email, password);
+    setUser(u);
+    return u;
   };
 
   const logout = () => {
@@ -44,7 +18,16 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  const value = { user, login, register, logout, loading };
+  return (
+    <AuthContext.Provider value={{ user, setUser, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+// eslint-disable-next-line react-refresh/only-export-components
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
+  return ctx;
 };

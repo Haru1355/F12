@@ -1,150 +1,184 @@
 import { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { authService } from '../services/authService';
+import { useNavigate } from 'react-router-dom';
 import { formService } from '../services/formService';
 
 export const PsychologistDashboard = () => {
-  const { user } = useAuth();
-  const [psychologistData, setPsychologistData] = useState(null);
-  const [forms, setForms] = useState([]);
-  const [showFormCreator, setShowFormCreator] = useState(false);
-  const [newFormTitle, setNewFormTitle] = useState('');
-  const [questions, setQuestions] = useState([{ questionText: '', type: 'text' }]);
-  const [message, setMessage] = useState('');
+  const navigate = useNavigate();
+  const [tests, setTests] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState('');
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps, no-undef
-  const loadData = useCallback(async () => {
+  useEffect(() => {
+    loadTests();
+  }, []);
+
+  const loadTests = async () => {
     try {
-      setLoading(true);
-      const psychs = await authService.getAllPsychologists(); // или можно запросить /users/me, но пока так
-      const currentPsych = psychs.find(p => p.email === user.email);
-      setPsychologistData(currentPsych);
-      const myForms = await formService.getFormsByPsychologist(currentPsych.id);
-      setForms(myForms);
-    } catch (err) {
-      setMessage(err.message);
+      const data = await formService.getMyForms();
+      setTests(data);
+    } catch {
+      setMessage('Ошибка загрузки тестов');
     } finally {
       setLoading(false);
     }
-  });
-
-  useEffect(() => {
-    if (user) loadData();
-  }, [loadData, user]);
-
-  const handleAddQuestion = () => {
-    setQuestions([...questions, { questionText: '', type: 'text' }]);
   };
 
-  const handleQuestionChange = (index, field, value) => {
-    const updated = [...questions];
-    updated[index][field] = value;
-    setQuestions(updated);
+  const showMsg = (msg) => {
+    setMessage(msg);
+    setTimeout(() => setMessage(''), 3000);
   };
 
-  const handleCreateForm = async (e) => {
-    e.preventDefault();
-    if (!newFormTitle) return;
+  const handleDelete = async (id) => {
+    if (!window.confirm('Удалить тест? Все данные будут потеряны.')) return;
     try {
-      await formService.createForm(psychologistData.id, newFormTitle, questions);
-      setNewFormTitle('');
-      setQuestions([{ questionText: '', type: 'text' }]);
-      setShowFormCreator(false);
-      await loadData();
-      setMessage('Опрос создан!');
-      setTimeout(() => setMessage(''), 3000);
-    // eslint-disable-next-line no-unused-vars
-    } catch (err) {
-      setMessage('Ошибка создания опроса');
+      await formService.deleteForm(id);
+      showMsg('Тест удалён');
+      loadTests();
+    } catch {
+      showMsg('Ошибка удаления');
     }
   };
 
-  const getFormLink = (formId) => {
-    return `${window.location.origin}/form/${formId}`;
+  const handleCopyLink = (link) => {
+    const url = `${window.location.origin}/form/${link}`;
+    navigator.clipboard.writeText(url);
+    showMsg('Ссылка скопирована!');
   };
 
-  if (loading) return <div className="container">Загрузка...</div>;
-  if (!psychologistData) return <div className="container">Психолог не найден</div>;
-
-  const subscriptionExpiry = psychologistData.subscriptionExpiry ? new Date(psychologistData.subscriptionExpiry) : null;
-  const isActive = subscriptionExpiry ? subscriptionExpiry > new Date() : false;
+  if (loading) {
+    return <div style={{ textAlign: 'center', padding: 60 }}>Загрузка...</div>;
+  }
 
   return (
-    <div className="container">
-      <h1 style={{ margin: '2rem 0' }}>Личный кабинет психолога</h1>
-      {message && <div className="alert alert-success">{message}</div>}
-
-      <div className="card">
-        <h2>Добро пожаловать, {psychologistData.name}</h2>
-        <p>
-          <strong>Статус подписки:</strong>{' '}
-          {isActive ? (
-            <span style={{ color: 'var(--secondary)' }}>Активна до {subscriptionExpiry.toLocaleDateString()}</span>
-          ) : (
-            <span style={{ color: 'var(--danger)' }}>Не активна. Обратитесь к администратору.</span>
-          )}
-        </p>
+    <div style={{ maxWidth: 900, margin: '2rem auto', padding: '0 1rem' }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 24,
+        }}
+      >
+        <h1 style={{ margin: 0 }}>Мои тесты</h1>
+        <button
+          onClick={() => navigate('/psychologist/constructor/new')}
+          style={{
+            background: '#6366f1',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 8,
+            padding: '10px 24px',
+            fontSize: 15,
+            cursor: 'pointer',
+            fontWeight: 600,
+          }}
+        >
+          + Создать тест
+        </button>
       </div>
 
-      <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <h2>Мои опросы</h2>
-          <button onClick={() => setShowFormCreator(!showFormCreator)} className="btn btn-primary">
-            + Создать опрос
-          </button>
+      {message && (
+        <div
+          style={{
+            background: '#dcfce7',
+            color: '#166534',
+            padding: '12px 16px',
+            borderRadius: 8,
+            marginBottom: 16,
+            textAlign: 'center',
+          }}
+        >
+          {message}
         </div>
+      )}
 
-        {showFormCreator && (
-          <form onSubmit={handleCreateForm} style={{ marginBottom: '2rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
-            <h3>Новый опрос</h3>
-            <div className="form-group">
-              <label>Название опроса</label>
-              <input type="text" value={newFormTitle} onChange={(e) => setNewFormTitle(e.target.value)} required />
+      {tests.length === 0 ? (
+        <div
+          style={{
+            background: '#fff',
+            borderRadius: 12,
+            boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+            padding: 48,
+            textAlign: 'center',
+            color: '#9ca3af',
+          }}
+        >
+          <p style={{ fontSize: 48, marginBottom: 8 }}>📋</p>
+          <p>Пока нет тестов. Создайте первый!</p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: 16 }}>
+          {tests.map((test) => (
+            <div
+              key={test.id}
+              style={{
+                background: '#fff',
+                borderRadius: 12,
+                boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+                padding: 20,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                gap: 16,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 200 }}>
+                <h3 style={{ margin: '0 0 4px' }}>{test.title}</h3>
+                <div style={{ display: 'flex', gap: 12, fontSize: 13, color: '#6b7280' }}>
+                  <span>📝 {test.questions_count || 0} вопросов</span>
+                  <span>👤 {test.sessions_count || 0} прохождений</span>
+                  <span
+                    style={{
+                      background: test.is_published ? '#dcfce7' : '#fef3c7',
+                      color: test.is_published ? '#166534' : '#92400e',
+                      padding: '1px 8px',
+                      borderRadius: 10,
+                    }}
+                  >
+                    {test.is_published ? 'Опубликован' : 'Черновик'}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                {test.unique_link && (
+                  <button
+                    onClick={() => handleCopyLink(test.unique_link)}
+                    title="Копировать ссылку"
+                    style={btnOutline}
+                  >
+                    🔗
+                  </button>
+                )}
+                <button
+                  onClick={() =>
+                    navigate(`/psychologist/constructor/${test.id}`)
+                  }
+                  style={btnOutline}
+                >
+                  ✏️ Редактировать
+                </button>
+                <button
+                  onClick={() => handleDelete(test.id)}
+                  style={{ ...btnOutline, color: '#ef4444', borderColor: '#fca5a5' }}
+                >
+                  🗑
+                </button>
+              </div>
             </div>
-            <h4>Вопросы</h4>
-            {questions.map((q, idx) => (
-              <div key={idx} style={{ marginBottom: '1rem', padding: '1rem', background: '#f1f5f9', borderRadius: 'var(--radius)' }}>
-                <div className="form-group">
-                  <label>Текст вопроса {idx + 1}</label>
-                  <input type="text" value={q.questionText} onChange={(e) => handleQuestionChange(idx, 'questionText', e.target.value)} required />
-                </div>
-                <div className="form-group">
-                  <label>Тип вопроса</label>
-                  <select value={q.type} onChange={(e) => handleQuestionChange(idx, 'type', e.target.value)}>
-                    <option value="text">Текстовый ответ</option>
-                    <option value="radio">Один вариант (Да/Нет)</option>
-                  </select>
-                </div>
-              </div>
-            ))}
-            <button type="button" onClick={handleAddQuestion} className="btn btn-outline" style={{ marginRight: '1rem' }}>Добавить вопрос</button>
-            <button type="submit" className="btn btn-primary">Сохранить опрос</button>
-          </form>
-        )}
-
-        {forms.length === 0 ? (
-          <p>У вас пока нет опросов. Создайте первый!</p>
-        ) : (
-          <div className="grid" style={{ gridTemplateColumns: '1fr', gap: '1rem' }}>
-            {forms.map(form => (
-              <div key={form.id} className="card" style={{ background: '#f8fafc' }}>
-                <h3>{form.title}</h3>
-                <p>Создан: {new Date(form.createdAt).toLocaleDateString()}</p>
-                <p>Вопросов: {form.questions.length}</p>
-                <div>
-                  <strong>Ссылка для клиента:</strong>
-                  <input type="text" readOnly value={getFormLink(form.id)} onClick={(e) => e.target.select()} style={{ fontSize: '0.875rem' }} />
-                  <button onClick={() => {
-                    navigator.clipboard.writeText(getFormLink(form.id));
-                    alert('Ссылка скопирована!');
-                  }} className="btn btn-outline" style={{ marginTop: '0.5rem' }}>Копировать</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
+};
+
+const btnOutline = {
+  background: '#fff',
+  border: '1px solid #d1d5db',
+  borderRadius: 8,
+  padding: '8px 14px',
+  cursor: 'pointer',
+  fontSize: 14,
 };
